@@ -29,7 +29,7 @@
 
 ## 2026-06-10 15:01 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `34d6464` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 5 (asyncio engine) — DONE. Task 6 (LiteLLM tool adapter) next.
 
