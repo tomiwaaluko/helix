@@ -50,3 +50,7 @@
   payloads, pointing the `corpus.active` alias at the new collection. Chunk ids map to
   deterministic `uuid5` point ids (re-index overwrites). Returns an `IndexResult` summary and
   wraps the run in a `kind="internal"` span. (Task 10)
+- Add BM25 sparse retrieval (`helix.tools.bm25.BM25Index`): builds an in-memory
+  `rank_bm25.BM25Okapi` index over chunks (lowercase whitespace tokenization), `search` returns
+  ranked `ScoredChunk`s, and `save`/`load` pickle the index for reuse. Empty corpus yields no
+  results. (Task 11)

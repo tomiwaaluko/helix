@@ -44,6 +44,7 @@ module = [
   "sentence_transformers",
   "sentence_transformers.*",
   "tiktoken",
+  "rank_bm25",
 ]
 ignore_missing_imports = true
 
