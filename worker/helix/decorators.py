@@ -17,6 +17,8 @@ import asyncio
 import functools
 from collections.abc import Awaitable, Callable
 
+from helix.runtime.context import current_engine
+
 # `helix.gather` is exactly asyncio.gather; re-exported so workflow code depends
 # on the SDK surface rather than asyncio directly.
 gather = asyncio.gather
@@ -48,9 +50,13 @@ class Task[**P, R]:
         functools.update_wrapper(self, fn)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> Awaitable[R]:
-        # Single dispatch point. Local mode: call through directly. Task 5 adds
-        # engine-aware dispatch here without touching workflow code.
-        return self._fn(*args, **kwargs)
+        # Single dispatch point. Local mode (no active engine) awaits the
+        # function directly; submit mode hands off to the engine, which returns
+        # a Future. Workflow code is identical either way.
+        engine = current_engine.get()
+        if engine is None:
+            return self._fn(*args, **kwargs)
+        return engine.dispatch(self, args, kwargs)
 
 
 class Workflow[**P, R]:

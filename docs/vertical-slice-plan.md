@@ -322,7 +322,7 @@ The decorators `@helix.task` and `helix.gather` behave differently depending on 
 | `@helix.task` invocation | Direct `await` of the underlying `async def`. No wrapping. | Engine enqueues the task. The caller receives a `Future` that resolves when the engine completes the task and writes the result. |
 | `helix.gather` | Delegates to `asyncio.gather`. | Enqueues all tasks concurrently, returns a `Future` that resolves when all complete. Each parallel branch gets its own task row. |
 | SQLite writes | None. | **On enqueue:** `tasks` row inserted with `status='ready'`, `input` populated. **On dispatch:** `status='running'`, `attempts` incremented. **On success:** `status='succeeded'`, `output` written. **On failure:** `status='failed'`, `error` written. Run-level: `runs` row created on `submit()` with `status='running'`; updated to `succeeded`/`failed` when all tasks resolve. |
-| Span emission | None (unless the task internally uses the logger). | Engine wraps each task dispatch in a span (`kind="workflow"`). Tool adapters emit their own child spans as in both modes. |
+| Span emission | None (unless the task internally uses the logger). | Engine wraps each task dispatch in a span (`kind="task"`). Tool adapters emit their own child spans as in both modes. |
 | Retries | None. Exception propagates immediately. | Single retry (budget=1 for the slice). On failure, task is re-enqueued once. After exhaustion, task and run are marked `failed`. |
 | Context vars | `trace_id` is unset. | `trace_id` and `span_id` are set before dispatch, visible to tool adapters for span parenting. |
 

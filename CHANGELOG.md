@@ -17,3 +17,10 @@
   (`runs`, `tasks`, `eval_results`, `datasets`) with `create_run`/`update_run`,
   `create_task`/`update_task`, `store_eval_result`/`get_eval_results`, and an idempotent
   `register_dataset`. Single connection, serialized writes; JSON state in TEXT columns. (Task 4)
+- Add the asyncio engine (`helix.runtime.engine.Engine`): runs a submitted workflow as a
+  coroutine and dispatches each `@task` call through an `asyncio.Queue`, returning a `Future`.
+  Mode is detected via a `contextvars.ContextVar[Engine | None]` (new `helix.runtime.context`),
+  so workflow code is identical in `.local()` and `submit()`. Persists run/task lifecycle to
+  SQLite, emits a `kind="task"` span per dispatch, and retries once before failing. Also adds
+  `SqliteStore.get_tasks`. Corrected the slice-plan span-kind contract from `workflow` to
+  `task`. (Task 5)
