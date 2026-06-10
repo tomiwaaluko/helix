@@ -29,7 +29,7 @@
 
 ## 2026-06-10 19:50 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `d9c5438` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 12 (hybrid retriever + reranker) — DONE. Task 13 (corpus prep script) next.
 
