@@ -13,3 +13,7 @@
   per-run `trace_id` propagate via `contextvars`, so nested spans get correct
   `parent_span_id` across `await`/`gather`. Field names match the target ClickHouse
   `spans` schema. (Task 3)
+- Add `helix.runtime.sqlite_store.SqliteStore`: async CRUD over the slice's SQLite state
+  (`runs`, `tasks`, `eval_results`, `datasets`) with `create_run`/`update_run`,
+  `create_task`/`update_task`, `store_eval_result`/`get_eval_results`, and an idempotent
+  `register_dataset`. Single connection, serialized writes; JSON state in TEXT columns. (Task 4)

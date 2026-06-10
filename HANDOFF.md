@@ -27,6 +27,44 @@
 
 ---
 
+## 2026-06-10 14:19 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 4 (SQLite state store) — DONE. Task 5 (asyncio engine) next.
+
+**What shipped this session**
+- `helix/runtime/sqlite_store.py`: `SqliteStore` with async CRUD over `runs`, `tasks`,
+  `eval_results`, `datasets` (simplified slice schema; JSON in TEXT columns). Methods:
+  `create_run`/`update_run`/`get_run`, `create_task`/`update_task`/`get_task`,
+  `store_eval_result`/`get_eval_results`, `register_dataset` (idempotent on `(name,version)`).
+  Partial updates leave `None` columns unchanged; `update_run` auto-sets `finished_at` on
+  terminal status. Frozen `*Row` dataclasses for reads (named with a `Row` suffix to avoid
+  colliding with the SDK `Task`). Single connection + WAL + `foreign_keys=ON`; the connection's
+  background thread serializes writes (the single-writer gotcha — engine owns this in Task 5).
+- `tests/test_sqlite_store.py`: run/task lifecycles, error + no-op updates, eval result
+  grouping/details, dataset idempotency. Suite now 16 tests.
+- Added `aiosqlite` to the 3.12 verify venv (it's already a pinned runtime dep in pyproject).
+
+**What's next**
+1. Task 5 (Claude Code — load-bearing per CLAUDE.md): the asyncio engine + `contextvars`
+   mode detection. Wires `Task.__call__` dispatch (the single point left in `decorators.py`)
+   to the engine in submit mode while local mode stays a direct call. Route ALL state writes
+   through the store via a single writer task.
+
+**Open questions / decisions pending**
+- `update_run`/`update_task` treat `None` as "unchanged", so a column can't be nulled back
+  out once set. Fine for the slice's forward-only state machine; revisit if the engine ever
+  needs to clear `output`/`error`.
+
+**Gotchas hit**
+- mypy: `aiosqlite.connect` wants `str | Path`, not `PathLike`. Coerced the stored path with
+  `os.fspath(...)` in `__init__`.
+- Same 3.12 toolchain requirement (PEP 695). Verified via `/tmp/helixvenv`: ruff clean,
+  `mypy --strict helix/` clean (10 files), 16 pytest pass.
+
+---
+
 ## 2026-06-10 13:57 UTC — Claude Code → next session
 
 **Last commit:** `590b856` on `claude/current-phase-gotchas-tjkwsu`
