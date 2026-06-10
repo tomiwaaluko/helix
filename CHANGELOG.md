@@ -60,3 +60,8 @@
   `metadata["doc_id"]` for the recall scorer. Emits a `kind="retrieval"` span
   (`query`, `retriever`, `top_k`, `results`). Reranker model is lazily loaded and the predict
   fn injectable for testing. (Task 12)
+- Add corpus preparation: `helix.eval.corpus` (pure logic — `wiki_doc_id` hashing, `build_corpus`
+  dedup-by-title over both HotpotQA context shapes, `write_corpus` JSONL) plus a thin
+  `scripts/prepare_corpus.py` that downloads HotpotQA distractor-dev via `datasets` and writes
+  `data/corpus.jsonl`. The `wiki_<title_hash>` id scheme is shared so Task 14's `supporting_facts`
+  resolve against the corpus. Adds `datasets` as a dependency. (Task 13)
