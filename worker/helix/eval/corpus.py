@@ -83,3 +83,14 @@ def write_corpus(docs: Iterable[CorpusDoc], path: str | PathLike[str]) -> int:
             handle.write(json.dumps(asdict(doc)) + "\n")
             count += 1
     return count
+
+
+def load_corpus_ids(path: str | PathLike[str]) -> set[str]:
+    """Read the ``id`` of every doc in a corpus JSONL file."""
+    ids: set[str] = set()
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped:
+                ids.add(str(json.loads(stripped)["id"]))
+    return ids

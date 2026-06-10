@@ -27,6 +27,47 @@
 
 ---
 
+## 2026-06-10 22:17 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 14 (HotpotQA 100-question prep) — DONE. Task 14b (holdout) next,
+but it's blocked on Task 16's harness (see below). Task 15 (deep_research) is the bigger next item.
+
+**What shipped this session** (ship-first; logic in package, thin script wrapper)
+- `helix/eval/hotpotqa.py`: `build_questions(examples, start, count, id_prefix, id_start)` →
+  rows in the `data-model.md` schema (`id`, `input.question`, `expected_output.answer` +
+  `supporting_facts[{doc_id, sent}]`, `metadata.hops/type`). `hops` = unique supporting doc_ids;
+  handles both supporting-fact shapes (HF `{title, sent_id}` and raw `[title, sent]`). Plus
+  `write_examples`, `supporting_doc_ids`, `missing_doc_ids` (referential-integrity check).
+- `helix/eval/corpus.py`: added `load_corpus_ids(path)`.
+- `scripts/prepare_hotpotqa.py`: downloads `hotpot_qa/distractor/validation`, writes the first 100
+  to `evals/datasets/hotpotqa_dev_100.jsonl`, and validates supporting doc_ids against
+  `data/corpus.jsonl` if present (raises `SystemExit` on a gap).
+- `tests/test_hotpotqa.py`: schema, raw shape, slicing/numbering, and integrity (consistent with
+  `build_corpus` from the same example; gap detection). Suite now 58 tests. No new dependency.
+
+**What's next**
+1. Task 15 (Claude Code — load-bearing per CLAUDE.md): `helix/workflows/deep_research.py` — the
+   reference agent (`decompose` → `gather(retrieve)` → `synthesize`) as `@helix.task`/
+   `@helix.workflow`. Must populate `Answer.metadata["retrieved_doc_ids"]` (union of retrieved
+   doc_ids across subqueries) or recall silently zeros. Uses `llm_call` (temp 0) + `HybridRetriever`.
+2. Task 14b (holdout) is partially blocked: its access guard lives in `helix/eval/harness.py`
+   (Task 16, not built yet). The independent parts (holdout extraction via `build_questions(start=100,
+   count=500)`, the `.sha256` lock, `scripts/check_holdout_integrity.py`, and
+   `.github/workflows/holdout-guard.yml`) can be done now, but the `HoldoutAccessError` raise +
+   `make eval-final` Done-when need the harness + CLI. Recommend doing 14b alongside/after Task 16.
+
+**Open questions / decisions pending**
+- Holdout id numbering for 14b is unspecified (`hotpotqa_dev_101..600`? `hotpotqa_holdout_001..500`?).
+  `build_questions` already supports `id_prefix`/`id_start` either way — pick when starting 14b.
+
+**Gotchas hit**
+- None new. Verified via `/tmp/helixvenv` (3.12): ruff clean (worker + both scripts), `mypy
+  --strict helix/` clean (23 files), 58 pytest pass.
+
+---
+
 ## 2026-06-10 22:13 UTC — Claude Code → next session
 
 **Last commit:** `f9be5ef` on `claude/current-phase-gotchas-tjkwsu`

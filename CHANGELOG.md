@@ -65,3 +65,8 @@
   `scripts/prepare_corpus.py` that downloads HotpotQA distractor-dev via `datasets` and writes
   `data/corpus.jsonl`. The `wiki_<title_hash>` id scheme is shared so Task 14's `supporting_facts`
   resolve against the corpus. Adds `datasets` as a dependency. (Task 13)
+- Add HotpotQA eval-dataset prep: `helix.eval.hotpotqa` (pure — `build_questions` to the
+  `data-model.md` schema over both supporting-fact shapes, `write_examples`, and
+  `missing_doc_ids`/`supporting_doc_ids` integrity checks) plus `scripts/prepare_hotpotqa.py`,
+  which writes `evals/datasets/hotpotqa_dev_100.jsonl` and validates supporting-fact `doc_id`s
+  against `data/corpus.jsonl`. Supporting-fact titles reuse `wiki_doc_id`. (Task 14)
