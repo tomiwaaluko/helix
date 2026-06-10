@@ -1,5 +1,22 @@
-"""Helix SDK — public surface for the vertical slice.
+"""Helix SDK — public authoring surface for the vertical slice.
 
-Concrete exports (``workflow``, ``task``, ``gather``, and the core types) land
-in later tasks. This package is intentionally empty during scaffolding.
+Workflow code is plain Python; decorators register it with the runtime. During
+the slice only the local (in-process) path is wired up; submit mode lands with
+the engine.
 """
+
+from __future__ import annotations
+
+from helix.decorators import Task, Workflow, gather, task, workflow
+from helix.types import Answer, Citation, Doc
+
+__all__ = [
+    "Answer",
+    "Citation",
+    "Doc",
+    "Task",
+    "Workflow",
+    "gather",
+    "task",
+    "workflow",
+]

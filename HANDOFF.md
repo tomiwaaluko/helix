@@ -27,6 +27,44 @@
 
 ---
 
+## 2026-06-10 13:45 UTC — Claude Code → next session
+
+**Last commit:** `a8053a6` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 2 (SDK decorators, local execution) — DONE. Task 3 (span logger) next.
+
+**What shipped this session**
+- `helix/types.py`: `Doc`, `Citation`, `Answer` dataclasses (spec-exact fields/defaults).
+- `helix/decorators.py`: `@task(retries=, timeout=)`, `@workflow(name=, version=)` with
+  `.local(**kwargs)`, and `gather = asyncio.gather`. Tasks/workflows are thin generic
+  wrappers that call through directly in local mode; retry/timeout are parsed into metadata
+  but inert. `Task.__call__` is the single dispatch point Task 5's engine will hook.
+- `helix/__init__.py`: public exports (`Doc`, `Citation`, `Answer`, `Task`, `Workflow`,
+  `task`, `workflow`, `gather`).
+- `tests/test_decorators.py`: toy two-task workflow via `.local()`, gather ordering, metadata,
+  timeout parsing, type defaults. 7 tests pass.
+
+**What's next**
+1. Task 3: `helix/logging.py` — `SpanLogger` writing JSONL to `data/spans.jsonl`, with a
+   `span(name, kind, attributes)` context manager and a contextvar span stack for
+   `parent_span_id`. Schema fields are fixed (`trace_id`, `span_id`, `parent_span_id`,
+   `name`, `kind`, `start_time`, `end_time`, `attributes`) — do not rename.
+
+**Open questions / decisions pending**
+- None blocking Task 3.
+
+**Gotchas hit**
+- **Toolchain must be Python 3.12+.** The code uses PEP 695 generics (`class Task[**P, R]`),
+  which is a `SyntaxError` on 3.11. This sandbox's default `python3`/`mypy`/`ruff` are tied
+  to **3.11**, so `make lint`/`make test` fail there with a misleading "Invalid syntax" from
+  mypy. Verified instead via a 3.12 venv (`python3.12 -m venv`): ruff clean, `mypy --strict
+  helix/` clean (8 files), 7 pytest pass. The Makefile is correct for the maintainer's 3.12
+  env and was left unchanged. `python3.12`/`python3.13` are both present at `/usr/bin`.
+- ParamSpec lives in the PEP 695 form (`[**P, R]`); ruff's UP046 rejects the old
+  `Generic[P, R]` subclass form under `target-version = py312`.
+
+---
+
 ## 2026-06-10 13:35 UTC — Claude Code → next session
 
 **Last commit:** `34228f5` on `claude/current-phase-gotchas-tjkwsu`
