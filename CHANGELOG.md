@@ -35,3 +35,8 @@
   `search_document:` task prefixes, internal batching (default 64), and a `kind="internal"`
   span (`model`, `count`, `dimension`). The model is lazily loaded and the encode fn is
   injectable, so tests run against a stub. (Task 7)
+- Add the Qdrant adapter (`helix.tools.qdrant_adapter.QdrantAdapter`): async `upsert` (batched,
+  100), `search` (via `query_points`), `create_collection`, and `set_alias`. All reads/writes go
+  through a collection alias (default `corpus.active`); `search` emits a `kind="retrieval"` span.
+  Client is lazily imported and injectable, so tests run against Qdrant's in-memory local mode.
+  Bumped the `qdrant-client` floor to `>=1.12` for the `query_points` API. (Task 8)
