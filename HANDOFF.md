@@ -29,7 +29,7 @@
 
 ## 2026-06-10 22:43 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `f9dcdce` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 15 (deep_research) — DONE. Task 16 (eval harness) + Task 14b
 (holdout) next, as one unit.
