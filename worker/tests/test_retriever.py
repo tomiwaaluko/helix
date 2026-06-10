@@ -74,6 +74,8 @@ async def test_hybrid_retrieve_end_to_end(tmp_path: Path) -> None:
     assert 1 <= len(results) <= 2
     assert {r.metadata["doc_id"] for r in results} <= {"d1", "d2"}
     assert all(set(r.metadata) == {"doc_id", "chunk_id"} for r in results)
+    # Doc.id is the corpus doc_id (not the chunk_id).
+    assert all(r.id == r.metadata["doc_id"] for r in results)
 
     spans = [json.loads(line) for line in (tmp_path / "spans.jsonl").read_text().splitlines()]
     retrieve_span = next(s for s in spans if s["name"] == "retrieve")

@@ -27,6 +27,56 @@
 
 ---
 
+## 2026-06-10 22:43 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 15 (deep_research) — DONE. Task 16 (eval harness) + Task 14b
+(holdout) next, as one unit.
+
+**What shipped this session** (plan-first; maintainer signed off in chat)
+- `helix/workflows/deep_research.py`: `decompose` → parallel `retrieve` → `synthesize`
+  (`@helix.task`/`@helix.workflow`). LLM calls via `llm_call` (temp 0); `retrieve` via the hybrid
+  retriever. Workflow attaches the deduped union of retrieved `doc.id`s to
+  `Answer.metadata["retrieved_doc_ids"]` (the recall gotcha). Deps (retriever, top_k, model,
+  span_logger, cache, injectable completion/cost fns) come from a `contextvars` `ResearchDeps` via
+  `using_research_deps(...)`. One `kind="workflow"` span wraps the run; llm/retrieval spans nest.
+- Parsing: `_parse_subqueries` (JSON array, markdown-fence/prose-tolerant, cap 4, fallback to
+  `[question]`); `_parse_synthesis` (answer text + trailing `CITATIONS: <doc_ids>` line, citations
+  filtered to the evidence set; "I don't know" → empty citations).
+- `helix/workflows/prompts/decompose.txt`, `synthesize.txt` (loaded via `Path(__file__).parent`).
+- **`helix/rag/retriever.py`: `Doc.id` is now the corpus `doc_id`** (was `chunk_id`; chunk_id
+  stays in `metadata`) — decision #2, approved. Updated `tests/test_retriever.py` to assert it.
+- `tests/test_deep_research.py`: parser units + end-to-end `.local()` against in-memory Qdrant
+  with a fake LLM (asserts answer, deduped doc-level `retrieved_doc_ids`, citations ⊆ retrieved,
+  2 LLM calls, span tree). Suite now 63 tests.
+
+**What's next**
+1. Task 16 + Task 14b together: `helix/eval/harness.py` (dataset loading + eval runner + the
+   **holdout access guard** `HoldoutAccessError` keyed on the substring `holdout` +
+   `HELIX_HOLDOUT_UNLOCK=1`), then 14b's holdout extraction (`build_questions(start=100,
+   count=500)`), `.sha256` lock, `scripts/check_holdout_integrity.py`, and
+   `.github/workflows/holdout-guard.yml`. The harness runs `deep_research` per question — wire
+   `using_research_deps` around the run loop (deps are run-wide constants; one binding before the
+   concurrent gather propagates to every question's local execution).
+
+**Open questions / decisions pending**
+- **Submit-mode deps:** `ResearchDeps` is a contextvar set in the workflow's context, so it's
+  visible in `.local()` but NOT to engine handlers (worker-loop context). Eval uses `.local()`,
+  so fine for now; revisit if eval ever dispatches via the engine (same nested-context item as
+  Task 5).
+- **Prompt packaging:** prompts are read via `Path(__file__).parent` — works for editable installs
+  (the slice). A wheel build would need `package_data`/`importlib.resources`. Note for M1+.
+
+**Gotchas hit**
+- mypy invariance: LLM `messages` must be annotated `list[dict[str, Any]]` (a `list[dict[str,str]]`
+  literal won't pass to the `list[dict[str, Any]]` param). Verified via `/tmp/helixvenv` (3.12):
+  ruff clean, `mypy --strict helix/` clean (24 files), 63 pytest pass.
+- Could not real-LLM spot-check the 3 questions from the Done-when (no network/API key here); the
+  mechanics are covered by the fake-LLM e2e test. Real spot-check happens on `make eval`.
+
+---
+
 ## 2026-06-10 22:17 UTC — Claude Code → next session
 
 **Last commit:** `d612d3d` on `claude/current-phase-gotchas-tjkwsu`

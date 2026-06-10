@@ -95,7 +95,9 @@ class HybridRetriever:
 
             docs = [
                 Doc(
-                    id=fused[r.index].chunk_id,
+                    # Doc.id is the corpus doc_id (recall is measured at doc level,
+                    # and citations reference doc_id); chunk_id lives in metadata.
+                    id=fused[r.index].doc_id,
                     text=fused[r.index].text,
                     source=fused[r.index].source,
                     score=r.score,
