@@ -29,7 +29,7 @@
 
 ## 2026-06-10 13:57 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `590b856` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 3 (structured span logger) — DONE. Task 4 (SQLite state store) next.
 
