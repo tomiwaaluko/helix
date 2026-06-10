@@ -30,3 +30,8 @@
   defaults `temperature=0`, and caches by `sha256` of canonical generation params. Cache hits
   replay with `cost_usd=0`/`replayed=true`; on by default outside production, off via
   `HELIX_LLM_CACHE=0`. LiteLLM is lazily imported and injectable for testing. (Task 6)
+- Add the embedding client (`helix.tools.embedder.Embedder`): Nomic Embed v1.5 via
+  sentence-transformers, with `embed_queries`/`embed_documents` applying the `search_query:` /
+  `search_document:` task prefixes, internal batching (default 64), and a `kind="internal"`
+  span (`model`, `count`, `dimension`). The model is lazily loaded and the encode fn is
+  injectable, so tests run against a stub. (Task 7)

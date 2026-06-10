@@ -37,7 +37,7 @@ strict = true
 files = ["helix"]
 
 [[tool.mypy.overrides]]
-module = ["litellm", "litellm.*"]
+module = ["litellm", "litellm.*", "sentence_transformers", "sentence_transformers.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
