@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "helix"
+version = "0.0.0"
+description = "Helix vertical slice — single-process research loop runtime."
+requires-python = ">=3.12"
+dependencies = [
+  "litellm>=1.40",
+  "qdrant-client>=1.9",
+  "sentence-transformers>=3.0",
+  "aiosqlite>=0.20",
+  "rank-bm25>=0.2",
+  "httpx>=0.27",
+  "click>=8.1",
+  "pydantic>=2.7",
+]
+
+[project.optional-dependencies]
+dev = ["ruff>=0.4", "mypy>=1.10", "pytest>=8", "pytest-asyncio>=0.23"]
+
+[tool.setuptools.packages.find]
+include = ["helix*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+files = ["helix"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
