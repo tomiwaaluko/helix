@@ -27,6 +27,43 @@
 
 ---
 
+## 2026-06-10 15:40 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 6 (LiteLLM tool adapter) — DONE. Task 7 (embedding client) next.
+
+**What shipped this session** (ship-first; self-contained tool adapter)
+- `helix/tools/llm_cache.py`: `LLMCache` (JSON files under `data/llm_cache/`, keyed by
+  `sha256` of canonical `{model, messages, temperature, max_tokens, top_p, stop}` with `None`
+  values dropped) + `cache_enabled()` (on unless `HELIX_ENV=production` or `HELIX_LLM_CACHE=0`).
+- `helix/tools/litellm_adapter.py`: `llm_call(...)` async wrapper. Emits a `kind="llm"` span
+  with `model`/`prompt_tokens`/`completion_tokens`/`cost_usd`/`cache_hit`/`replayed`. Cache hit
+  → returns immediately with `cost_usd=0`, `cache_hit=replayed=True`, tokens replayed. Miss →
+  LiteLLM, write cache. `temperature=0` default; model from `HELIX_DEFAULT_MODEL`
+  (default `claude-sonnet-4-20250514`). LiteLLM + cost fns are lazily imported and injectable,
+  so tests need neither the dep nor a network/API key.
+- `worker/pyproject.toml`: mypy override `ignore_missing_imports` for `litellm`.
+- `tests/test_litellm_adapter.py`: key stability/sensitivity, miss→hit (LiteLLM called once),
+  `--no-cache` bypass, `temperature=0` default, env model resolution, span attributes. 26 tests.
+
+**What's next**
+1. Task 7: `helix/tools/embedder.py` — Nomic Embed v1.5 wrapper (sentence-transformers).
+   Likely the first real heavyweight dep; consider the same lazy-import + injectable pattern so
+   tests don't pull the model. Check the spec for batching/normalization specifics.
+
+**Open questions / decisions pending**
+- None blocking Task 7.
+
+**Gotchas hit**
+- mypy `--strict` + untyped third-party: added a `[[tool.mypy.overrides]]` block for `litellm`
+  (`ignore_missing_imports`). Keep LiteLLM usage behind `Any` (cast the lazy handles) so the
+  adapter never depends on its annotations.
+- Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean (14 files),
+  26 pytest pass. `data/llm_cache/` is already gitignored via the `data/` rule.
+
+---
+
 ## 2026-06-10 15:01 UTC — Claude Code → next session
 
 **Last commit:** `34d6464` on `claude/current-phase-gotchas-tjkwsu`

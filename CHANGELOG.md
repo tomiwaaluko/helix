@@ -24,3 +24,9 @@
   SQLite, emits a `kind="task"` span per dispatch, and retries once before failing. Also adds
   `SqliteStore.get_tasks`. Corrected the slice-plan span-kind contract from `workflow` to
   `task`. (Task 5)
+- Add the LiteLLM tool adapter (`helix.tools.litellm_adapter.llm_call`) and disk-backed
+  response cache (`helix.tools.llm_cache.LLMCache`). Async wrapper over `acompletion` that
+  emits a `kind="llm"` span (model, token counts, `cost_usd`, `cache_hit`, `replayed`),
+  defaults `temperature=0`, and caches by `sha256` of canonical generation params. Cache hits
+  replay with `cost_usd=0`/`replayed=true`; on by default outside production, off via
+  `HELIX_LLM_CACHE=0`. LiteLLM is lazily imported and injectable for testing. (Task 6)
