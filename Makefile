@@ -45,6 +45,7 @@ test:
 	cd worker && python -m pytest tests/ -x -q
 
 lint:
+	python scripts/check_holdout_integrity.py
 	cd worker && ruff check . && mypy --strict helix/
 
 fmt:

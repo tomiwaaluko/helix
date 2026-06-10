@@ -77,3 +77,12 @@
   `ResearchDeps` (`using_research_deps`); system prompts live in `helix/workflows/prompts/`.
   Also changes `HybridRetriever` so `Doc.id` is the corpus `doc_id` (chunk_id stays in
   metadata), so recall and citations key off the doc. (Task 15)
+- Add the eval harness (`helix.eval.harness`): `load_dataset` (JSONL + schema validation),
+  `evaluate(workflow_fn, dataset, scorers, concurrency, store)` (semaphore-bounded async runs,
+  per-scorer SQLite persistence, mean/std/seeded-95%-bootstrap-CI aggregation), and `EvalReport`
+  (`.metrics`/`.per_example`/`.to_json`). (Task 16)
+- Add the holdout access guard (Task 14b, code): `load_dataset` raises `HoldoutAccessError` for
+  any `holdout` path unless `HELIX_HOLDOUT_UNLOCK=1`; the holdout filename lives only in
+  `harness.py`. `scripts/prepare_hotpotqa.py` extended to emit the 500-question holdout + a
+  `.sha256` lock; `scripts/check_holdout_integrity.py` (run in `make lint`, skips if absent); and
+  a `holdout-guard.yml` CI workflow that rejects unauthorized holdout filename references. (Task 14b)
