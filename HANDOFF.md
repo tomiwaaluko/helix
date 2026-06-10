@@ -27,6 +27,49 @@
 
 ---
 
+## 2026-06-10 22:13 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 13 (corpus prep) — DONE. Task 14 (HotpotQA question prep) next.
+
+**What shipped this session** (ship-first; logic in package, thin script wrapper)
+- `helix/eval/corpus.py`: pure corpus-prep logic — `wiki_doc_id(title)` (`wiki_` + sha1[:16] of
+  the stripped title), `CorpusDoc`, `build_corpus(examples, limit=None)` (dedup by title, handles
+  **both** HotpotQA context shapes — HF parallel `title`/`sentences` lists and raw `[title,
+  [sentences]]` pairs), and `write_corpus` → JSONL.
+- `scripts/prepare_corpus.py`: thin wrapper — lazily imports `datasets`, loads
+  `hotpot_qa/distractor/validation`, builds the corpus from the first 500 questions, writes
+  `data/corpus.jsonl`. (Couldn't run end-to-end here — no network/dataset — but the logic it calls
+  is fully unit-tested.)
+- `worker/pyproject.toml`: added `datasets>=2.0`. `docs/tech-stack.md`: datasets rationale.
+- `tests/test_corpus.py`: id determinism/stripping, dedup-by-title across both shapes + a
+  shared "Beta" title, limit, JSONL roundtrip. Suite now 53 tests.
+
+**Key cross-task contract**
+- **Task 14 must import `wiki_doc_id` from `helix.eval.corpus`** and apply it to each
+  `supporting_facts` title, so `doc_id`s match the corpus. Do not re-implement the hash.
+
+**What's next**
+1. Task 14: `scripts/prepare_hotpotqa.py` (+ pure logic in `helix.eval.corpus` or a sibling) —
+   extract 100 questions into `evals/datasets/hotpotqa_dev_100.jsonl` with the `data-model.md`
+   schema (`id`, `input.question`, `expected_output.answer` + `supporting_facts[{doc_id, sent}]`,
+   `metadata.hops/type`). Done-when includes referential-integrity validation against the corpus.
+
+**Open questions / decisions pending**
+- `scripts/` lives outside `worker/`, so the Makefile's `ruff`/`mypy` (which run in `worker/`)
+  don't cover it. I ruff-checked the wrapper manually (clean). The real logic is in `helix` and is
+  covered. If we want scripts linted in CI, the lint target needs to include the repo root.
+- `print()` in the script is intentional (CLI seed feedback); the no-print rule targets library
+  code in `helix`, not entry-point scripts.
+
+**Gotchas hit**
+- None new. `datasets` is imported lazily inside the script's `main()` so neither the tests nor
+  `helix` import it. Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/`
+  clean (22 files), 53 pytest pass.
+
+---
+
 ## 2026-06-10 19:50 UTC — Claude Code → next session
 
 **Last commit:** `d9c5438` on `claude/current-phase-gotchas-tjkwsu`

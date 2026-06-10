@@ -132,6 +132,12 @@ Every choice below is justified against the alternatives we considered. Where th
 
 **Why:** Fast, dependency-light token counting to size chunks consistently. It is not tied to the embedding or generation model — it only needs to be a stable proxy for length, and `cl100k_base` is good enough for that.
 
+### HuggingFace datasets for corpus/eval seeding
+
+**Pick:** `datasets` to download HotpotQA distractor-dev for the seed scripts.
+
+**Why:** Canonical, cached loader for HotpotQA; keeps the corpus + question prep reproducible from a clean checkout. Only the thin `scripts/` wrappers touch it — the formatting logic in `helix.eval.corpus` is pure and dataset-agnostic.
+
 ## Frontend
 
 ### Next.js 14 + TypeScript + Tailwind + shadcn/ui
