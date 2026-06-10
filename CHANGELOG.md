@@ -70,3 +70,10 @@
   `missing_doc_ids`/`supporting_doc_ids` integrity checks) plus `scripts/prepare_hotpotqa.py`,
   which writes `evals/datasets/hotpotqa_dev_100.jsonl` and validates supporting-fact `doc_id`s
   against `data/corpus.jsonl`. Supporting-fact titles reuse `wiki_doc_id`. (Task 14)
+- Add the `deep_research` workflow (`helix.workflows.deep_research`): `decompose` →
+  parallel `retrieve` → `synthesize`, as `@helix.task`/`@helix.workflow`. LLM calls run at
+  `temperature=0`; the workflow attaches the deduped union of retrieved `doc_id`s to
+  `Answer.metadata["retrieved_doc_ids"]`. Dependencies are injected via a `contextvars`
+  `ResearchDeps` (`using_research_deps`); system prompts live in `helix/workflows/prompts/`.
+  Also changes `HybridRetriever` so `Doc.id` is the corpus `doc_id` (chunk_id stays in
+  metadata), so recall and citations key off the doc. (Task 15)
