@@ -27,6 +27,43 @@
 
 ---
 
+## 2026-06-10 18:43 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 10 (indexer) — DONE. Task 11 (BM25 sparse retrieval) next.
+
+**What shipped this session** (ship-first; composes the Task 7–9 tools)
+- `helix/rag/indexer.py`: `index_corpus(...)` → `IndexResult`. Loads JSONL `{id,text,source}`,
+  chunks every doc, embeds all chunk texts, upserts `Point`s with `{doc_id, chunk_id, source,
+  text}` payloads, and points the `corpus.active` alias at the collection. Chunk ids map to a
+  deterministic `uuid5` for the Qdrant point id (re-index overwrites instead of duplicating);
+  the readable `chunk_id` lives in the payload. Whole run wrapped in a `kind="internal"` span
+  (docs/chunks/elapsed_s); embedder + adapter are injected so their child spans nest under it.
+- `tests/test_indexer.py`: 100-doc corpus is searchable via the alias with the expected payload,
+  span nesting (embed/upsert under index_corpus), and an empty-corpus case. Suite now 41 tests.
+
+**What's next**
+1. Task 11: `helix/tools/bm25.py` — sparse retrieval with `rank_bm25`. Pure-Python, ship-first.
+   Check the spec for tokenization and whether it indexes chunks (shares the chunk corpus) or
+   docs, and the score/return shape the hybrid retriever (Task 12) will expect.
+
+**Open questions / decisions pending**
+- `index_corpus` calls `create_collection` unconditionally, so re-indexing the *same* collection
+  name raises (collection exists). Fine for the slice's fresh-index flow; a real re-index would
+  need a recreate/delete step or a new collection name + alias flip. Flag if needed sooner.
+
+**Gotchas hit**
+- **Alias bootstrap ordering.** The adapter always writes through the alias (production
+  invariant), but on a *fresh* index there is no alias yet — upserting before `set_alias` raised
+  "Collection corpus.active not found". Fixed by creating the alias right after the collection,
+  before upsert (so the alias-routed write resolves). Reordered vs the spec's step list; behavior
+  is equivalent and correct.
+- Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean (18 files),
+  41 pytest pass.
+
+---
+
 ## 2026-06-10 18:36 UTC — Claude Code → next session
 
 **Last commit:** `d05c0a2` on `claude/current-phase-gotchas-tjkwsu`
