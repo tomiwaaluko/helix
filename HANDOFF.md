@@ -29,7 +29,7 @@
 
 ## 2026-06-10 18:30 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `65c1bf8` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 8 (Qdrant adapter) — DONE. Task 9 (chunker) next.
 
