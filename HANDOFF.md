@@ -29,7 +29,7 @@
 
 ## 2026-06-10 23:03 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `cb5150e` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 16 (eval harness) — DONE. Task 14b — CODE done, holdout DATA
 generation deferred (needs dataset/network + Task 18 CLI). Task 17 (scorers) next.
