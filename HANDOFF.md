@@ -27,6 +27,42 @@
 
 ---
 
+## 2026-06-10 19:38 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 11 (BM25 sparse retrieval) — DONE. Task 12 (hybrid retriever + reranker) next.
+
+**What shipped this session** (ship-first; pure-Python component)
+- `helix/tools/bm25.py`: `BM25Index` over `rank_bm25.BM25Okapi`. `build(chunks)` classmethod
+  (lowercase whitespace tokenization), `search(query, top_k)` → ranked `ScoredChunk`
+  (`chunk_id, doc_id, text, source, score`), `save`/`load` pickle the
+  `(chunks, tokenized, bm25)` tuple. Empty corpus → `_bm25 = None` → `search` returns `[]`
+  (BM25Okapi divides by avg doc length, so it can't index an empty corpus).
+- `worker/pyproject.toml`: added `rank_bm25` to the mypy override (untyped).
+- `tests/test_bm25.py`: matching-term ranks first, score-descending order, top_k limit,
+  save/load round-trip (same ids + scores), empty corpus. Suite now 46 tests.
+
+**What's next**
+1. Task 12: `helix/rag/retriever.py` — hybrid dense (Qdrant) + sparse (BM25) with RRF fusion,
+   then BGE cross-encoder rerank. This is where `ScoredPoint` (dense) and `ScoredChunk` (sparse)
+   get fused by `chunk_id` rank into `Doc`s. Check the spec for RRF k constant, candidate counts,
+   and the reranker model/return shape. BGE reranker is a heavyweight dep — use the same
+   lazy-import + injectable pattern so tests stay light.
+
+**Open questions / decisions pending**
+- `BM25Index.search` returns the full `top_k` even when some scores are 0 (no term overlap). The
+  hybrid retriever fuses by rank, so this is intended; flag if zero-score filtering is wanted.
+- No span emitted by BM25 (spec is silent). The hybrid retriever (Task 12) will own the
+  `kind="retrieval"` span over the whole dense+sparse+rerank path.
+
+**Gotchas hit**
+- None new. `rank_bm25.get_scores` returns a numpy array; sort indices by score and `float()` the
+  result. Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean
+  (19 files), 46 pytest pass.
+
+---
+
 ## 2026-06-10 18:43 UTC — Claude Code → next session
 
 **Last commit:** `05f5e17` on `claude/current-phase-gotchas-tjkwsu`
