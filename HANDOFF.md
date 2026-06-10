@@ -29,7 +29,7 @@
 
 ## 2026-06-10 18:36 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `d05c0a2` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 9 (chunker) — DONE. Task 10 (indexer workflow) next.
 
