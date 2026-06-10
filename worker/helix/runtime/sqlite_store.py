@@ -304,6 +304,13 @@ class SqliteStore:
             row = await cur.fetchone()
         return _row_to_task(row) if row is not None else None
 
+    async def get_tasks(self, run_id: str) -> list[TaskRow]:
+        async with self._db.execute(
+            "SELECT * FROM tasks WHERE run_id = ? ORDER BY node_id", (run_id,)
+        ) as cur:
+            rows = await cur.fetchall()
+        return [_row_to_task(row) for row in rows]
+
     # ---- eval results -------------------------------------------------------
 
     async def store_eval_result(

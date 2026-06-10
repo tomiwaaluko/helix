@@ -27,6 +27,59 @@
 
 ---
 
+## 2026-06-10 15:01 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 5 (asyncio engine) — DONE. Task 6 (LiteLLM tool adapter) next.
+
+**What shipped this session** (plan-first; maintainer signed off in chat)
+- `helix/runtime/context.py`: `current_engine` / `current_run` contextvars. Separate module so
+  `decorators.py` reads them without importing `engine.py` (no import cycle).
+- `helix/runtime/engine.py`: `Engine` runs a submitted workflow as a coroutine; each `@task`
+  call dispatches through an `asyncio.Queue` and returns a `Future`. Run success/failure is
+  driven by the workflow coroutine returning/raising (dynamic DAG — no static graph). Per-task
+  lifecycle persisted (`ready`→`running`→`succeeded`/`failed`, `attempts` bumped per dispatch,
+  insert-before-enqueue so the `running` update never races a missing row). One `kind="task"`
+  span per dispatch under the run's `trace_id`. Retry budget 1. `asyncio.Semaphore` concurrency
+  (default 4). Background `_enqueue`/handler tasks are tracked in sets so they aren't GC'd.
+- `helix/decorators.py`: wired the single dispatch point — `current_engine.get()` is `None`
+  (local → direct await) or the engine (submit → `engine.dispatch`).
+- `helix/runtime/sqlite_store.py`: added `get_tasks(run_id)`.
+- `docs/vertical-slice-plan.md`: corrected the span-kind contract cell from `workflow` to
+  `task` (decision #4, approved).
+- `tests/test_engine.py`: gated lifecycle (ready→running→succeeded asserted mid-flight),
+  parallel branches get distinct `node_id`s, retry-then-fail (`attempts==2`, run `failed`),
+  task spans, and local-vs-submit invariance. Suite now 21 tests; ran 3× for flakiness — stable.
+
+**Decisions (approved by maintainer)**
+- Single writer = the `SqliteStore`'s one aiosqlite connection (already serializes); no separate
+  writer task.
+- Task spans are `kind="task"`, not `kind="workflow"` as the spec table originally read; the
+  doc was corrected to match.
+- Non-JSON task inputs (e.g. `list[Doc]`) travel in-memory; the `tasks.input/output` columns get
+  a best-effort JSON snapshot (`{"args": [...], "kwargs": {...}}`, dataclasses→asdict, else str).
+- Slice `tasks` table has no error column, so a failed task is `status='failed'` only; the error
+  rides the Future up to the `runs.error` row.
+
+**What's next**
+1. Task 6: `helix/tools/litellm_adapter.py` + `llm_cache.py` — LiteLLM call path with the
+   disk-backed cache. Mind the gotchas: cache key = `model+messages+temperature+max_tokens`
+   (+`top_p`,`stop`); cache hits emit `cache_hit=true`/`cost_usd=0`; `temperature=0` default;
+   never bypass LiteLLM.
+
+**Open questions / decisions pending**
+- Nested `@task`-from-`@task` isn't wired (handlers run in the worker-loop context without
+  `current_engine`/`current_run` set). Not needed for `deep_research`'s leaf tasks; revisit if
+  a future workflow dispatches tasks from inside a task.
+
+**Gotchas hit**
+- ruff `ASYNC109`: an async helper with a `timeout` param trips it; renamed to `timeout_s`.
+- Same 3.12 toolchain requirement (PEP 695). Verified via `/tmp/helixvenv`: ruff clean,
+  `mypy --strict helix/` clean (12 files), 21 pytest pass.
+
+---
+
 ## 2026-06-10 14:19 UTC — Claude Code → next session
 
 **Last commit:** `722d69c` on `claude/current-phase-gotchas-tjkwsu`
