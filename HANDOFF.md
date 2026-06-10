@@ -29,7 +29,7 @@
 
 ## 2026-06-10 22:17 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `d612d3d` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 14 (HotpotQA 100-question prep) — DONE. Task 14b (holdout) next,
 but it's blocked on Task 16's harness (see below). Task 15 (deep_research) is the bigger next item.
