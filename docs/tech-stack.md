@@ -126,6 +126,12 @@ Every choice below is justified against the alternatives we considered. Where th
 
 **Why:** Mature library, sensible defaults, native InfoNCE loss support, integrates with HuggingFace model hub for sharing fine-tuned checkpoints.
 
+### tiktoken for chunk sizing
+
+**Pick:** `tiktoken` with the `cl100k_base` encoding for the indexer's chunker.
+
+**Why:** Fast, dependency-light token counting to size chunks consistently. It is not tied to the embedding or generation model — it only needs to be a stable proxy for length, and `cl100k_base` is good enough for that.
+
 ## Frontend
 
 ### Next.js 14 + TypeScript + Tailwind + shadcn/ui

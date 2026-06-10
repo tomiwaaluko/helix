@@ -27,6 +27,42 @@
 
 ---
 
+## 2026-06-10 18:36 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 9 (chunker) — DONE. Task 10 (indexer workflow) next.
+
+**What shipped this session** (ship-first; pure-Python, no service)
+- `helix/rag/chunker.py`: `chunk_document(...)` → `list[Chunk]`. Structural splitting:
+  paragraphs (blank-line) → sentences (for oversized paragraphs) → word-window fallback (for a
+  sentence still over budget). Greedy packing to `max_tokens` (512) with `overlap_tokens` (64)
+  carried from each chunk's tail into the next (capped so overlap + next segment still fits).
+  Deterministic `{doc_id}#chunk{N}` ids; `tiktoken` `cl100k_base` sizing via an injectable
+  counter.
+- `worker/pyproject.toml`: added `tiktoken>=0.7` dependency + mypy override.
+- `docs/tech-stack.md`: added the tiktoken rationale (DoD item 7 — new dependency).
+- `tests/test_chunker.py`: ~2000-word doc within budget + sequential ids, tiny/empty docs,
+  oversized-paragraph→sentences, oversized-sentence→words, and overlap duplication
+  (sum of chunk tokens == doc tokens at overlap 0, > doc tokens at overlap 40). Suite now 39.
+
+**What's next**
+1. Task 10: `helix/rag/indexer.py` — the indexer workflow that ties chunker → embedder →
+   Qdrant upsert (embed_documents on chunk text, upsert Points with payload). Likely a
+   `@helix.workflow`/`@helix.task` composition. Check the spec for payload shape (doc_id,
+   chunk_id, text, source) and collection/vector-size config (768 from Nomic).
+
+**Open questions / decisions pending**
+- Chunks are joined with a single space (segments lose original blank-line breaks). Fine for
+  retrieval; flag if faithful reconstruction of original formatting is ever needed.
+
+**Gotchas hit**
+- None new. `tiktoken` counter is injectable so tests use a word-count stub (no tokenizer
+  download). Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean
+  (17 files), 39 pytest pass.
+
+---
+
 ## 2026-06-10 18:30 UTC — Claude Code → next session
 
 **Last commit:** `65c1bf8` on `claude/current-phase-gotchas-tjkwsu`
