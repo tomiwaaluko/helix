@@ -17,6 +17,7 @@ from helix.rag.indexer import index_corpus  # noqa: E402
 from helix.rag.retriever import HybridRetriever  # noqa: E402
 from helix.tools.bm25 import BM25Index  # noqa: E402
 from helix.tools.embedder import Embedder  # noqa: E402
+from helix.tools.llm_cache import LLMCache  # noqa: E402
 from helix.tools.qdrant_adapter import QdrantAdapter  # noqa: E402
 from helix.tools.reranker import Reranker  # noqa: E402
 from helix.types import Doc  # noqa: E402
@@ -137,6 +138,7 @@ async def test_deep_research_local_end_to_end(tmp_path: Path) -> None:
             retriever=retriever,
             top_k=2,
             span_logger=logger,
+            cache=LLMCache(tmp_path / "llm_cache"),  # isolate from the on-disk default cache
             completion_fn=fake_llm,
             cost_fn=lambda _raw: 0.0,
         )

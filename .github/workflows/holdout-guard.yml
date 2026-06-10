@@ -1,0 +1,27 @@
+name: holdout-guard
+
+# Fails if any Python file other than the eval harness and the prep script
+# references the holdout dataset filename. Catches accidental hardcoded reads in
+# notebooks, scripts, or test fixtures that would bypass the harness access guard.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Reject unauthorized holdout filename references
+        run: |
+          set -euo pipefail
+          matches="$(grep -rl --include='*.py' 'hotpotqa_dev_holdout_500.jsonl' . \
+            | grep -v -e 'worker/helix/eval/harness.py' -e 'scripts/prepare_hotpotqa.py' || true)"
+          if [ -n "$matches" ]; then
+            echo "Unauthorized holdout filename reference in:"
+            echo "$matches"
+            echo "Holdout reads must go through helix.eval.harness.load_dataset."
+            exit 1
+          fi
+          echo "No unauthorized holdout references."

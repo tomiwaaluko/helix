@@ -27,6 +27,65 @@
 
 ---
 
+## 2026-06-10 23:03 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 16 (eval harness) — DONE. Task 14b — CODE done, holdout DATA
+generation deferred (needs dataset/network + Task 18 CLI). Task 17 (scorers) next.
+
+**What shipped this session** (plan-first; maintainer briefed)
+- `helix/eval/harness.py`: `load_dataset` (JSONL + schema validation), `evaluate(workflow_fn,
+  dataset, scorers, *, concurrency, store, eval_id, bootstrap_samples, seed)` — semaphore-bounded
+  async runs, scores via `scorers: Mapping[str, Scorer]` (`Scorer = (Example, output) -> float |
+  ScoreResult`), persists each result to SQLite (`store_eval_result`), aggregates mean/std/95%
+  **seeded** bootstrap CI. `EvalReport` (`.metrics`, `.per_example`, `.to_json`). `Example`,
+  `ScoreResult`, `sha256_file`.
+- **Task 14b access guard:** `HoldoutAccessError` raised by `load_dataset` when `"holdout"` is in
+  the path and `HELIX_HOLDOUT_UNLOCK != "1"`. The holdout filename literal lives ONLY in
+  `harness.py` (constants `HOLDOUT_DATASET_PATH`/`HOLDOUT_SHA256_PATH`); `prepare_hotpotqa.py` and
+  `check_holdout_integrity.py` import it.
+- `scripts/prepare_hotpotqa.py`: extended to also build the holdout (`build_questions(start=100,
+  count=500, id_prefix="hotpotqa_holdout")`) and write its `.sha256`.
+- `scripts/check_holdout_integrity.py`: verifies the holdout hash; **skips (exit 0) if absent** so
+  `make lint` stays green pre-seed. Wired into the Makefile `lint` target.
+- `.github/workflows/holdout-guard.yml`: fails if any `*.py` outside the two whitelisted files
+  references the holdout filename.
+- `tests/test_harness.py`: load/validate, holdout guard (block without unlock / allow with),
+  aggregation + SQLite persistence (40 rows, details), bootstrap determinism, sha256. Suite 70.
+
+**Deferred (cannot complete here)**
+- The actual `evals/datasets/hotpotqa_dev_holdout_500.jsonl` + `.sha256` files — no
+  dataset/network to generate them. Run `python scripts/prepare_hotpotqa.py` (after
+  `prepare_corpus.py`) in an env with `datasets` to produce + commit them.
+- 14b Done-when items 1–2 (`make eval-final` succeeds; CLI eval on the holdout raises
+  `HoldoutAccessError`) need the CLI (Task 18). The guard itself is done and unit-tested.
+
+**What's next**
+1. Task 17: `helix/eval/scorers.py` — `answer_f1`, `citation_precision`,
+   `retrieval_recall_at_k(k=10)` matching the `Scorer = (Example, output) -> float | ScoreResult`
+   shape. `retrieval_recall_at_k` reads `output.metadata["retrieved_doc_ids"]` (populated by
+   deep_research) vs `example.expected_output["supporting_facts"][].doc_id`.
+
+**Open questions / decisions pending**
+- Holdout ids use `hotpotqa_holdout_001..500` (disjoint prefix from the dev set). Easy to change
+  in the script if you'd prefer continued `hotpotqa_dev_101..600` numbering.
+- `scorers` is a `{name: fn}` mapping (not api.md's list + `@helix.scorer`). Cleaner for the slice
+  harness; Task 17 scorers are plain functions registered by the CLI under their names.
+
+**Gotchas hit**
+- **Test cache isolation:** the Task 15 `deep_research` e2e test passed `cache=None`, so `llm_call`
+  used the on-disk default `data/llm_cache/`; the first run populated it and the *second* run got
+  cache hits that bypassed the fake LLM (and wrote a `data/` dir into the repo). Fixed by passing a
+  tmp `LLMCache` in the test. **Workflow/LLM tests must isolate the cache** (tmp `LLMCache` or
+  `HELIX_LLM_CACHE=0`).
+- `make lint` now runs `python scripts/check_holdout_integrity.py` from the repo root, which
+  imports `helix` — so it requires `pip install -e worker` (the maintainer's env has it). Verified
+  here via `PYTHONPATH=worker`. Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict
+  helix/` clean (25 files), 70 pytest pass, CI grep guard passes.
+
+---
+
 ## 2026-06-10 22:43 UTC — Claude Code → next session
 
 **Last commit:** `f9dcdce` on `claude/current-phase-gotchas-tjkwsu`
