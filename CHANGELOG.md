@@ -54,3 +54,9 @@
   `rank_bm25.BM25Okapi` index over chunks (lowercase whitespace tokenization), `search` returns
   ranked `ScoredChunk`s, and `save`/`load` pickle the index for reuse. Empty corpus yields no
   results. (Task 11)
+- Add the hybrid retriever (`helix.rag.retriever.HybridRetriever`) and BGE reranker
+  (`helix.tools.reranker.Reranker`): dense (Qdrant) + sparse (BM25) candidates fused by RRF
+  (`k=60`), reranked by a cross-encoder, returned as top-k `Doc`s carrying
+  `metadata["doc_id"]` for the recall scorer. Emits a `kind="retrieval"` span
+  (`query`, `retriever`, `top_k`, `results`). Reranker model is lazily loaded and the predict
+  fn injectable for testing. (Task 12)
