@@ -29,7 +29,7 @@
 
 ## 2026-06-10 13:45 UTC — Claude Code → next session
 
-**Last commit:** `a8053a6` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `9699e4d` (Task 2 code) on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 2 (SDK decorators, local execution) — DONE. Task 3 (span logger) next.
 
