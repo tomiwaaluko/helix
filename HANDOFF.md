@@ -29,7 +29,7 @@
 
 ## 2026-06-10 22:13 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `f9be5ef` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 13 (corpus prep) — DONE. Task 14 (HotpotQA question prep) next.
 
