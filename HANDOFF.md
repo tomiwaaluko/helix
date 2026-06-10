@@ -29,7 +29,7 @@
 
 ## 2026-06-10 14:19 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `722d69c` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 4 (SQLite state store) — DONE. Task 5 (asyncio engine) next.
 
