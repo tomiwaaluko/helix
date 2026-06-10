@@ -27,6 +27,39 @@
 
 ---
 
+## 2026-06-10 13:57 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 3 (structured span logger) — DONE. Task 4 (SQLite state store) next.
+
+**What shipped this session**
+- `helix/logging.py`: `SpanLogger` appending JSONL to `data/spans.jsonl`; a `span(name,
+  kind, attributes)` context manager that yields the mutable attributes dict and writes the
+  record on exit; a `trace(trace_id=None)` binder. Span stack + per-run `trace_id` propagate
+  via `contextvars`, so `parent_span_id` is correct across `await`/`gather` (each asyncio
+  task copies the context). Record fields are exactly `trace_id, span_id, parent_span_id,
+  name, kind, start_time, end_time, attributes` — matching the target ClickHouse `spans`
+  schema (`docs/data-model.md`); times are ISO-8601 UTC strings (simplified vs DateTime64).
+- `tests/test_logging.py`: schema shape, nested parent-child, shared/auto trace_id, and
+  cross-`gather` propagation. Full suite now 11 tests.
+
+**What's next**
+1. Task 4: `helix/runtime/sqlite_store.py` — the SQLite state store (runs/tasks). Mind the
+   slice gotcha: `aiosqlite` has no clean concurrent writers, so all writes route through a
+   single engine writer task (that engine arrives in Task 5).
+
+**Open questions / decisions pending**
+- None blocking Task 4.
+
+**Gotchas hit**
+- Same 3.12 toolchain requirement as the prior entry (PEP 695). Verified via the
+  `/tmp/helixvenv` 3.12 venv: ruff clean, `mypy --strict helix/` clean (9 files), 11 pytest
+  pass. Default sandbox `python3`/`mypy` are 3.11 and will choke on the syntax.
+- ruff `UP017` under py312 wants `datetime.UTC`, not `timezone.utc`.
+
+---
+
 ## 2026-06-10 13:45 UTC — Claude Code → next session
 
 **Last commit:** `9699e4d` (Task 2 code) on `claude/current-phase-gotchas-tjkwsu`
