@@ -27,6 +27,44 @@
 
 ---
 
+## 2026-06-10 19:50 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 12 (hybrid retriever + reranker) — DONE. Task 13 (corpus prep script) next.
+
+**What shipped this session** (ship-first; composes Task 7/8/11 + new reranker)
+- `helix/tools/reranker.py`: `Reranker` (BGE cross-encoder). `rerank(query, passages, top_k)` →
+  `list[RankedPassage]` (`index, passage, score`). `CrossEncoder` lazily loaded; `predict_fn`
+  injectable so tests use a stub.
+- `helix/rag/retriever.py`: `HybridRetriever`. `retrieve(query, top_k=10, dense_k=50,
+  sparse_k=50, fuse_k=50, rrf_k=60)` → embeds query, Qdrant dense + BM25 sparse, **RRF fusion**
+  (combines by rank so the two score scales don't need calibrating), cross-encoder rerank, top-k
+  `Doc`s. Each `Doc` carries `metadata["doc_id"]`/`["chunk_id"]` (recall scorer needs doc_id).
+  One `kind="retrieval"` span: `query`, `retriever="hybrid+reranked"`, `top_k`, `results`.
+- `tests/test_reranker.py` (order/top_k/empty) + `tests/test_retriever.py` (end-to-end against
+  in-memory Qdrant: index → retrieve "apple" → the two apple docs rank top via the term-overlap
+  stub reranker; span asserted). Suite now 49 tests.
+
+**What's next**
+1. Task 13: `scripts/prepare_corpus.py` — download + format a 1–2k doc subset into
+   `data/corpus.jsonl` (`{id, text, source}`). First file under `scripts/`. Check the spec for
+   the source corpus (likely a HotpotQA-derived or wiki subset) and the `doc_id` hashing scheme
+   (Task 14 maps `supporting_facts` titles to these `doc_id`s with the same hash).
+
+**Open questions / decisions pending**
+- Retriever defaults `fuse_k=50` (fused candidates sent to the reranker) matching the spec's
+  "fused top-50"; `dense_k=sparse_k=50`. Easy knobs if eval tuning wants different candidate
+  counts.
+
+**Gotchas hit**
+- None new. The retriever test re-chunks the same docs (deterministic `chunk_document`) to build
+  the BM25 index so its `chunk_id`s match what `index_corpus` put in Qdrant — that alignment is
+  what makes RRF fuse the two sides correctly. Verified via `/tmp/helixvenv` (3.12): ruff clean,
+  `mypy --strict helix/` clean (21 files), 49 pytest pass.
+
+---
+
 ## 2026-06-10 19:38 UTC — Claude Code → next session
 
 **Last commit:** `0561308` on `claude/current-phase-gotchas-tjkwsu`
