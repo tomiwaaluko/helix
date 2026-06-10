@@ -40,3 +40,8 @@
   through a collection alias (default `corpus.active`); `search` emits a `kind="retrieval"` span.
   Client is lazily imported and injectable, so tests run against Qdrant's in-memory local mode.
   Bumped the `qdrant-client` floor to `>=1.12` for the `query_points` API. (Task 8)
+- Add the document chunker (`helix.rag.chunker.chunk_document`): structural splitting
+  (paragraphs → sentences → word-window fallback), greedy packing to `max_tokens` (default 512)
+  with `overlap_tokens` (default 64) carried across boundaries, deterministic `{doc_id}#chunk{N}`
+  ids, and `tiktoken` (`cl100k_base`) sizing. The token counter is injectable for testing. Adds
+  `tiktoken` as a dependency. (Task 9)
