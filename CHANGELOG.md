@@ -45,3 +45,8 @@
   with `overlap_tokens` (default 64) carried across boundaries, deterministic `{doc_id}#chunk{N}`
   ids, and `tiktoken` (`cl100k_base`) sizing. The token counter is injectable for testing. Adds
   `tiktoken` as a dependency. (Task 9)
+- Add the indexer (`helix.rag.indexer.index_corpus`): loads a JSONL corpus, chunks every doc,
+  embeds all chunks, and upserts them into Qdrant with `{doc_id, chunk_id, source, text}`
+  payloads, pointing the `corpus.active` alias at the new collection. Chunk ids map to
+  deterministic `uuid5` point ids (re-index overwrites). Returns an `IndexResult` summary and
+  wraps the run in a `kind="internal"` span. (Task 10)
