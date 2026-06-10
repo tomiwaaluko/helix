@@ -29,7 +29,7 @@
 
 ## 2026-06-10 16:23 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `77eeda5` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 7 (embedding client) — DONE. Task 8 (Qdrant adapter) next.
 
