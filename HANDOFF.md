@@ -29,7 +29,7 @@
 
 ## 2026-06-10 18:43 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `05f5e17` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 10 (indexer) — DONE. Task 11 (BM25 sparse retrieval) next.
 
