@@ -27,6 +27,41 @@
 
 ---
 
+## 2026-06-10 16:23 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 7 (embedding client) — DONE. Task 8 (Qdrant adapter) next.
+
+**What shipped this session** (ship-first; self-contained tool adapter)
+- `helix/tools/embedder.py`: `Embedder` over Nomic Embed v1.5 (sentence-transformers).
+  `embed_queries`/`embed_documents` apply the `search_query: ` / `search_document: ` task
+  prefixes (kept here and nowhere else — mixing them silently hurts recall). Internal batching
+  (default 64), one `kind="internal"` span per call with `model`/`count`/`dimension`. The
+  SentenceTransformer is lazily loaded (`trust_remote_code=True`) on first encode; the encode
+  fn is injectable (`encode_fn=`) so tests use a stub and never download the model.
+- `worker/pyproject.toml`: extended the mypy `ignore_missing_imports` override to
+  `sentence_transformers`.
+- `tests/test_embedder.py`: prefix correctness for both methods, batch-size boundaries
+  (10 texts @ batch 4 → [4,4,2]), 768-dim output, internal-span attributes. Suite now 30 tests.
+
+**What's next**
+1. Task 8: `helix/tools/qdrant_adapter.py` — Qdrant client wrapper (upsert + search). This is
+   the first adapter against a *real* external service (Qdrant in Docker via `make dev`). Decide
+   how to unit-test without a live Qdrant: same injectable-client pattern, or qdrant's in-memory
+   mode (`QdrantClient(":memory:")`). Check the spec for collection/vector config and whether it
+   wants the `corpus.active` alias indirection (that's a production gotcha; confirm slice scope).
+
+**Open questions / decisions pending**
+- None blocking Task 8.
+
+**Gotchas hit**
+- None new. Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean
+  (15 files), 30 pytest pass. sentence-transformers is a pre-existing pinned dep (no tech-stack
+  change); it's untyped, hence the mypy override.
+
+---
+
 ## 2026-06-10 15:40 UTC — Claude Code → next session
 
 **Last commit:** `be53d15` on `claude/current-phase-gotchas-tjkwsu`
