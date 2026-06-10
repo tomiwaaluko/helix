@@ -27,6 +27,39 @@
 
 ---
 
+## 2026-06-10 13:35 UTC — Claude Code → next session
+
+**Last commit:** `34228f5` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 1 (scaffold) — DONE. Task 2 (SDK decorators) next.
+
+**What shipped this session**
+- Task 1 scaffold: root `Makefile` (faithful to the slice-plan spec), `worker/pyproject.toml`
+  (pinned runtime deps + `dev` extras, with ruff/mypy/pytest config), the `helix/` package
+  tree with empty `__init__.py` files (`runtime`, `tools`, `rag`, `workflows`, `eval`),
+  `.gitignore` for `data/`/`*.db`, and a `tests/test_smoke.py` import check.
+- Verified `make lint` (ruff clean, `mypy --strict helix/` clean on 6 files) and `make test`
+  (1 passed) both green, invoked exactly as the Makefile defines them.
+
+**What's next**
+1. Task 2: `@helix.workflow`, `@helix.task`, `helix.gather` for local execution only, plus
+   `types.py` (`Doc`, `Answer`, `Citation`) and the public exports in `helix/__init__.py`.
+
+**Open questions / decisions pending**
+- None blocking Task 2.
+
+**Gotchas hit**
+- Local interpreter is **Python 3.11.15**, but `pyproject` pins `requires-python >=3.12`
+  per the spec. ruff/mypy/pytest all run fine under 3.11, so lint/test were verified, but a
+  full `pip install -e '.[dev]'` (which pulls litellm/sentence-transformers/qdrant-client)
+  was **not** run here — those heavy deps + the version pin make it a CI/3.12 concern, not a
+  scaffold blocker. `import helix` itself needs none of them.
+- `pytest` was not preinstalled; installed `pytest`/`pytest-asyncio` ad hoc to run the suite.
+  `make test` relies on pytest's rootdir insertion for `import helix` (no `PYTHONPATH` set) —
+  confirmed working.
+
+---
+
 ## 2026-06-10 — Cowork (Claude) → next session
 
 **Last commit:** operating-docs commit on `master` (run `git log -1 --oneline`; parent is `7dd58e8`)
