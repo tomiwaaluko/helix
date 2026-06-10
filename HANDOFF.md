@@ -27,6 +27,45 @@
 
 ---
 
+## 2026-06-10 18:30 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 8 (Qdrant adapter) — DONE. Task 9 (chunker) next.
+
+**What shipped this session** (ship-first; self-contained tool adapter)
+- `helix/tools/qdrant_adapter.py`: `QdrantAdapter` with async `create_collection`, `set_alias`,
+  `upsert` (batched at 100, `kind="internal"` span), and `search` (`kind="retrieval"` span).
+  `Point`/`ScoredPoint` dataclasses keep the surface independent of qdrant's types. All
+  reads/writes target the **alias** (default `corpus.active`), never a concrete collection — the
+  production alias-swap invariant, honored from day one. Client is lazily imported and injectable.
+- `worker/pyproject.toml`: bumped `qdrant-client` floor `>=1.9` → `>=1.12`.
+- `tests/test_qdrant_adapter.py`: real integration test against `AsyncQdrantClient(location=
+  ":memory:")` — create/alias/upsert(100)/search, batch boundaries (250 @ 100), and the
+  url-or-client guard. Suite now 33 tests.
+
+**What's next**
+1. Task 9: `helix/rag/chunker.py` — semantic + structural splitting. Pure-Python, no external
+   service, so straightforward ship-first. Check the spec for chunk size/overlap and whether it
+   needs the embedder (semantic splitting) or is purely structural for the slice.
+
+**Open questions / decisions pending**
+- Upsert span is `kind="internal"` (it's a write, not a retrieval); only `search` is
+  `kind="retrieval"`. Consistent with the embedder using `internal` for index-side work. Flag if
+  you'd rather every Qdrant op be `retrieval`.
+
+**Gotchas hit**
+- **qdrant-client 1.18 removed `AsyncQdrantClient.search`** — use `query_points(collection_name,
+  query=vector, limit, query_filter)`, which returns a `QueryResponse` with `.points`. Hence the
+  `>=1.12` floor bump.
+- mypy: a qdrant point `id` is `int | str | UUID`; coerce the non-`int`/`str` case to `str` when
+  building `ScoredPoint`.
+- Qdrant **local in-memory mode supports aliases**, so the alias path is genuinely covered by the
+  test (verified, not assumed). Verified via `/tmp/helixvenv` (3.12), qdrant-client 1.18:
+  ruff clean, `mypy --strict helix/` clean (16 files), 33 pytest pass.
+
+---
+
 ## 2026-06-10 16:23 UTC — Claude Code → next session
 
 **Last commit:** `77eeda5` on `claude/current-phase-gotchas-tjkwsu`
