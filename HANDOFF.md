@@ -36,7 +36,7 @@ committed. All 18 tasks done + both baseline runs complete.
 
 ```
 $ git log -1 --oneline
-<see commit below>
+6558e52 feat(eval): update baseline to canonical gemini-2.5-flash run (n=100)
 $ git status --short
 (clean)
 ```
