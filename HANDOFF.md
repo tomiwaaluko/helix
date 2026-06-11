@@ -27,6 +27,50 @@
 
 ---
 
+## 2026-06-11 23:00 UTC — Claude Code → next session
+
+**Last commit:** `633f24a` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** clean (after this HANDOFF commit)
+**Task plan position:** Fine-tune loop complete (Phases 0–4) + hybrid canary + mining resilience.
+
+```
+$ git log -1 --oneline
+633f24a feat(harness): tolerate per-example LLM failures in mining eval
+$ git status --short
+(clean)
+```
+
+**What shipped this session**
+- **Mining-eval resilience** (`633f24a`) — `evaluate()` now accepts `tolerate_failures=True`,
+  catching per-example exceptions after all retries and skipping instead of aborting the run.
+  - `worker/helix/eval/harness.py`: `EvalReport.examples_skipped: int = 0`; `run_one` catches
+    and returns `None` when `tolerate_failures=True`; gather filters `None`s.
+  - `worker/helix/cli.py`: `FinetuneResult.failures_skipped: int = 0`; `_finetune()` passes
+    `tolerate_failures=True` to the mining eval and threads `skipped` through all early returns;
+    `finetune` CLI prints "examples skipped (provider errors): N" when N > 0.
+  - 3 new harness tests + 1 CLI test. 136 total tests, mypy --strict clean on 35 files.
+
+**What's next**
+1. **Run the loop for real**: `make seed` then `make finetune`. The resilience fix means the
+   mining eval will now survive Gemini 503s — it'll skip failed examples and continue.
+   If the small corpus (420 docs) again mines zero failures (perfect recall), switch to the
+   full 15512-doc corpus with `--top-k 3` or `--top-k 5` to force missed gold docs.
+2. Both prior canary limitations still stand (noted in the previous HANDOFF entry below):
+   - Single-query retrieval proxy in the canary: the promotion score is based on per-example
+     single-query recall, not full multi-hop deep_research output. Acceptable for now.
+   - Chained promotions: each `make finetune` run uses the current `corpus.active` as base.
+     If back-to-back runs are needed, the second run must re-index on the promoted checkpoint.
+
+**Open questions / decisions pending**
+- None new. Full seed + real finetune run is the only outstanding work.
+
+**Gotchas hit**
+- Gemini 503 hit twice during smoke runs (see previous entry). Now resilient.
+- `evaluate()` return type change: `run_one` now returns `dict | None`; mypy needed the
+  explicit `raw: list[dict[str, Any] | None]` annotation on the gather result.
+
+---
+
 ## 2026-06-11 22:30 UTC — Claude Code → next session
 
 **Last commit:** `de5e697` on `claude/eloquent-clarke-qiha1x` (HANDOFF commit follows)

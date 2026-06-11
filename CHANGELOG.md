@@ -1,5 +1,11 @@
 ## Unreleased
 
+- **Mining-eval resilience** (`633f24a`): `evaluate()` gains a `tolerate_failures=True` parameter
+  that skips per-example failures (after all retries) instead of aborting the run. Skipped count
+  is recorded in `EvalReport.examples_skipped`, propagated into `FinetuneResult.failures_skipped`,
+  and printed by `make finetune` when > 0. `_finetune()` passes `tolerate_failures=True` for the
+  mining eval; baseline `eval` command remains all-or-nothing. Three new harness tests (partial
+  skips, all-fail, default-raises) + one CLI test. 136 total tests, mypy --strict clean.
 - Make the promotion canary run the **full hybrid pipeline** (dense + BM25 + rerank) instead of
   dense-only retrieval, so the promote/archive decision reflects end-to-end recall: a candidate
   whose dense gain is washed out by the reranker is no longer promoted. The CLI's
