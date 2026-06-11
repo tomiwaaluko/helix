@@ -1,28 +1,28 @@
 {
-  "eval_id": "eb0ad6edcab348e68c2abf1f8bca75ea",
+  "eval_id": "98b66307fdf3463b8d0634dfc7010a96",
   "workflow": "deep_research",
   "dataset": "hotpotqa_dev_100",
   "n": 100,
   "metrics": {
     "answer_f1": {
-      "mean": 0.1761269400226621,
-      "std": 0.14661870260072285,
-      "ci_low": 0.14795922022211663,
-      "ci_high": 0.20578644239409588,
+      "mean": 0.15540706457405773,
+      "std": 0.12424668723089861,
+      "ci_low": 0.13269120030608936,
+      "ci_high": 0.17808758920392032,
       "n": 100
     },
     "citation_precision": {
-      "mean": 0.9193333333333333,
-      "std": 0.22406249128312397,
-      "ci_low": 0.871,
-      "ci_high": 0.9626666666666667,
+      "mean": 0.9123333333333333,
+      "std": 0.21101105816204674,
+      "ci_low": 0.8690000000000001,
+      "ci_high": 0.9506666666666667,
       "n": 100
     },
     "retrieval_recall@10": {
-      "mean": 0.66,
-      "std": 0.2537715508089904,
-      "ci_low": 0.615,
-      "ci_high": 0.71,
+      "mean": 0.69,
+      "std": 0.24269322199023194,
+      "ci_low": 0.645,
+      "ci_high": 0.74,
       "n": 100
     }
   },
@@ -30,7 +30,7 @@
     {
       "example_id": "hotpotqa_dev_001",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.14285714285714288,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -38,7 +38,7 @@
     {
       "example_id": "hotpotqa_dev_002",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.17647058823529413,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -46,9 +46,9 @@
     {
       "example_id": "hotpotqa_dev_003",
       "scores": {
-        "answer_f1": 0.06060606060606061,
+        "answer_f1": 0.04878048780487806,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
@@ -70,7 +70,7 @@
     {
       "example_id": "hotpotqa_dev_006",
       "scores": {
-        "answer_f1": 0.19999999999999998,
+        "answer_f1": 0.21052631578947367,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -78,7 +78,7 @@
     {
       "example_id": "hotpotqa_dev_007",
       "scores": {
-        "answer_f1": 0.2666666666666667,
+        "answer_f1": 0.17391304347826084,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -86,7 +86,7 @@
     {
       "example_id": "hotpotqa_dev_008",
       "scores": {
-        "answer_f1": 0.2608695652173913,
+        "answer_f1": 0.3,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -94,7 +94,7 @@
     {
       "example_id": "hotpotqa_dev_009",
       "scores": {
-        "answer_f1": 0.17391304347826084,
+        "answer_f1": 0.23529411764705882,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -102,7 +102,7 @@
     {
       "example_id": "hotpotqa_dev_010",
       "scores": {
-        "answer_f1": 0.10526315789473684,
+        "answer_f1": 0.06451612903225806,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -110,7 +110,7 @@
     {
       "example_id": "hotpotqa_dev_011",
       "scores": {
-        "answer_f1": 0.2666666666666667,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -118,15 +118,15 @@
     {
       "example_id": "hotpotqa_dev_012",
       "scores": {
-        "answer_f1": 0.14285714285714288,
+        "answer_f1": 0.1904761904761905,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_013",
       "scores": {
-        "answer_f1": 0.15384615384615385,
+        "answer_f1": 0.08333333333333333,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -142,7 +142,7 @@
     {
       "example_id": "hotpotqa_dev_015",
       "scores": {
-        "answer_f1": 0.4444444444444445,
+        "answer_f1": 0.4210526315789474,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -150,7 +150,7 @@
     {
       "example_id": "hotpotqa_dev_016",
       "scores": {
-        "answer_f1": 0.18181818181818182,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -174,9 +174,9 @@
     {
       "example_id": "hotpotqa_dev_019",
       "scores": {
-        "answer_f1": 0.13793103448275862,
+        "answer_f1": 0.2608695652173913,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
@@ -190,7 +190,7 @@
     {
       "example_id": "hotpotqa_dev_021",
       "scores": {
-        "answer_f1": 0.21052631578947367,
+        "answer_f1": 0.16,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -198,7 +198,7 @@
     {
       "example_id": "hotpotqa_dev_022",
       "scores": {
-        "answer_f1": 0.11764705882352941,
+        "answer_f1": 0.13333333333333333,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -206,7 +206,7 @@
     {
       "example_id": "hotpotqa_dev_023",
       "scores": {
-        "answer_f1": 0.33333333333333337,
+        "answer_f1": 0.21428571428571425,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -214,7 +214,7 @@
     {
       "example_id": "hotpotqa_dev_024",
       "scores": {
-        "answer_f1": 0.1276595744680851,
+        "answer_f1": 0.1,
         "citation_precision": 0.6666666666666666,
         "retrieval_recall@10": 0.5
       }
@@ -222,7 +222,7 @@
     {
       "example_id": "hotpotqa_dev_025",
       "scores": {
-        "answer_f1": 0.5333333333333333,
+        "answer_f1": 0.4210526315789474,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -230,15 +230,15 @@
     {
       "example_id": "hotpotqa_dev_026",
       "scores": {
-        "answer_f1": 0.1904761904761905,
-        "citation_precision": 1.0,
+        "answer_f1": 0.23529411764705882,
+        "citation_precision": 0.5,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_027",
       "scores": {
-        "answer_f1": 0.25,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -246,7 +246,7 @@
     {
       "example_id": "hotpotqa_dev_028",
       "scores": {
-        "answer_f1": 0.0909090909090909,
+        "answer_f1": 0.08333333333333333,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -254,7 +254,7 @@
     {
       "example_id": "hotpotqa_dev_029",
       "scores": {
-        "answer_f1": 0.2608695652173913,
+        "answer_f1": 0.23076923076923078,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -262,7 +262,7 @@
     {
       "example_id": "hotpotqa_dev_030",
       "scores": {
-        "answer_f1": 0.42857142857142855,
+        "answer_f1": 0.3157894736842105,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -270,15 +270,15 @@
     {
       "example_id": "hotpotqa_dev_031",
       "scores": {
-        "answer_f1": 0.1,
+        "answer_f1": 0.06666666666666667,
         "citation_precision": 0.5,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_032",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.2857142857142857,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -286,15 +286,15 @@
     {
       "example_id": "hotpotqa_dev_033",
       "scores": {
-        "answer_f1": 0.10526315789473684,
-        "citation_precision": 0.5,
-        "retrieval_recall@10": 1.0
+        "answer_f1": 0.125,
+        "citation_precision": 0.6666666666666666,
+        "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_034",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.13333333333333333,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -302,23 +302,23 @@
     {
       "example_id": "hotpotqa_dev_035",
       "scores": {
-        "answer_f1": 0.4,
-        "citation_precision": 1.0,
+        "answer_f1": 0.1276595744680851,
+        "citation_precision": 0.6666666666666666,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_036",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_037",
       "scores": {
-        "answer_f1": 0.15384615384615385,
+        "answer_f1": 0.1111111111111111,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -326,7 +326,7 @@
     {
       "example_id": "hotpotqa_dev_038",
       "scores": {
-        "answer_f1": 0.35294117647058826,
+        "answer_f1": 0.21428571428571425,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -334,7 +334,7 @@
     {
       "example_id": "hotpotqa_dev_039",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.10526315789473684,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -352,7 +352,7 @@
       "scores": {
         "answer_f1": 0.3636363636363636,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
@@ -366,7 +366,7 @@
     {
       "example_id": "hotpotqa_dev_043",
       "scores": {
-        "answer_f1": 0.07999999999999999,
+        "answer_f1": 0.08695652173913045,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -374,15 +374,15 @@
     {
       "example_id": "hotpotqa_dev_044",
       "scores": {
-        "answer_f1": 0.16666666666666669,
-        "citation_precision": 0.3333333333333333,
+        "answer_f1": 0.07999999999999999,
+        "citation_precision": 0.5,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_045",
       "scores": {
-        "answer_f1": 0.17391304347826084,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -390,7 +390,7 @@
     {
       "example_id": "hotpotqa_dev_046",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.13333333333333333,
         "citation_precision": 0.5,
         "retrieval_recall@10": 1.0
       }
@@ -398,7 +398,7 @@
     {
       "example_id": "hotpotqa_dev_047",
       "scores": {
-        "answer_f1": 0.1142857142857143,
+        "answer_f1": 0.12121212121212122,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -406,7 +406,7 @@
     {
       "example_id": "hotpotqa_dev_048",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.2857142857142857,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -414,7 +414,7 @@
     {
       "example_id": "hotpotqa_dev_049",
       "scores": {
-        "answer_f1": 0.14285714285714288,
+        "answer_f1": 0.0909090909090909,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -422,39 +422,39 @@
     {
       "example_id": "hotpotqa_dev_050",
       "scores": {
-        "answer_f1": 0.13333333333333333,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_051",
       "scores": {
-        "answer_f1": 0.0,
-        "citation_precision": 1.0,
-        "retrieval_recall@10": 0.0
-      }
-    },
-    {
-      "example_id": "hotpotqa_dev_052",
-      "scores": {
-        "answer_f1": 0.3636363636363636,
+        "answer_f1": 0.2222222222222222,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
     },
     {
+      "example_id": "hotpotqa_dev_052",
+      "scores": {
+        "answer_f1": 0.2222222222222222,
+        "citation_precision": 1.0,
+        "retrieval_recall@10": 1.0
+      }
+    },
+    {
       "example_id": "hotpotqa_dev_053",
       "scores": {
-        "answer_f1": 0.3,
-        "citation_precision": 1.0,
+        "answer_f1": 0.33333333333333337,
+        "citation_precision": 0.6666666666666666,
         "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_054",
       "scores": {
-        "answer_f1": 0.07142857142857142,
+        "answer_f1": 0.08333333333333333,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -462,23 +462,23 @@
     {
       "example_id": "hotpotqa_dev_055",
       "scores": {
-        "answer_f1": 0.5833333333333334,
-        "citation_precision": 1.0,
+        "answer_f1": 0.4666666666666667,
+        "citation_precision": 0.5,
         "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_056",
       "scores": {
-        "answer_f1": 0.10344827586206896,
+        "answer_f1": 0.05714285714285714,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_057",
       "scores": {
-        "answer_f1": 0.0689655172413793,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -486,15 +486,15 @@
     {
       "example_id": "hotpotqa_dev_058",
       "scores": {
-        "answer_f1": 0.17391304347826084,
+        "answer_f1": 0.23529411764705882,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_059",
       "scores": {
-        "answer_f1": 0.21052631578947367,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -503,16 +503,16 @@
       "example_id": "hotpotqa_dev_060",
       "scores": {
         "answer_f1": 0.0,
-        "citation_precision": 0.5,
+        "citation_precision": 0.3333333333333333,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_061",
       "scores": {
-        "answer_f1": 0.42857142857142855,
+        "answer_f1": 0.38297872340425526,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
@@ -526,17 +526,17 @@
     {
       "example_id": "hotpotqa_dev_063",
       "scores": {
-        "answer_f1": 0.14285714285714285,
-        "citation_precision": 0.1,
+        "answer_f1": 0.1904761904761905,
+        "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_064",
       "scores": {
-        "answer_f1": 0.11764705882352941,
+        "answer_f1": 0.07999999999999999,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
@@ -550,8 +550,8 @@
     {
       "example_id": "hotpotqa_dev_066",
       "scores": {
-        "answer_f1": 0.125,
-        "citation_precision": 0.16666666666666666,
+        "answer_f1": 0.0909090909090909,
+        "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
     },
@@ -560,13 +560,13 @@
       "scores": {
         "answer_f1": 0.3846153846153846,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_068",
       "scores": {
-        "answer_f1": 0.07407407407407407,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -582,31 +582,31 @@
     {
       "example_id": "hotpotqa_dev_070",
       "scores": {
-        "answer_f1": 0.2857142857142857,
+        "answer_f1": 0.16666666666666669,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_071",
       "scores": {
-        "answer_f1": 0.26666666666666666,
+        "answer_f1": 0.15789473684210528,
         "citation_precision": 0.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_072",
       "scores": {
-        "answer_f1": 0.35294117647058826,
+        "answer_f1": 0.2857142857142857,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_073",
       "scores": {
-        "answer_f1": 0.1,
+        "answer_f1": 0.0909090909090909,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -614,7 +614,7 @@
     {
       "example_id": "hotpotqa_dev_074",
       "scores": {
-        "answer_f1": 0.3,
+        "answer_f1": 0.2857142857142857,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -622,7 +622,7 @@
     {
       "example_id": "hotpotqa_dev_075",
       "scores": {
-        "answer_f1": 0.06896551724137931,
+        "answer_f1": 0.10526315789473684,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -630,9 +630,9 @@
     {
       "example_id": "hotpotqa_dev_076",
       "scores": {
-        "answer_f1": 0.33333333333333337,
+        "answer_f1": 0.2727272727272727,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
@@ -662,7 +662,7 @@
     {
       "example_id": "hotpotqa_dev_080",
       "scores": {
-        "answer_f1": 0.15384615384615385,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -670,7 +670,7 @@
     {
       "example_id": "hotpotqa_dev_081",
       "scores": {
-        "answer_f1": 0.13333333333333333,
+        "answer_f1": 0.125,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -678,9 +678,9 @@
     {
       "example_id": "hotpotqa_dev_082",
       "scores": {
-        "answer_f1": 0.4,
+        "answer_f1": 0.3076923076923077,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
@@ -694,7 +694,7 @@
     {
       "example_id": "hotpotqa_dev_084",
       "scores": {
-        "answer_f1": 0.16666666666666666,
+        "answer_f1": 0.2,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -702,23 +702,23 @@
     {
       "example_id": "hotpotqa_dev_085",
       "scores": {
-        "answer_f1": 0.1904761904761905,
-        "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "answer_f1": 0.15384615384615385,
+        "citation_precision": 0.6666666666666666,
+        "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_086",
       "scores": {
-        "answer_f1": 0.4615384615384615,
+        "answer_f1": 0.19999999999999998,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
       "example_id": "hotpotqa_dev_087",
       "scores": {
-        "answer_f1": 0.10526315789473684,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -726,7 +726,7 @@
     {
       "example_id": "hotpotqa_dev_088",
       "scores": {
-        "answer_f1": 0.1875,
+        "answer_f1": 0.2222222222222222,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -742,15 +742,15 @@
     {
       "example_id": "hotpotqa_dev_090",
       "scores": {
-        "answer_f1": 0.125,
-        "citation_precision": 1.0,
+        "answer_f1": 0.0,
+        "citation_precision": 0.4,
         "retrieval_recall@10": 0.5
       }
     },
     {
       "example_id": "hotpotqa_dev_091",
       "scores": {
-        "answer_f1": 0.15384615384615385,
+        "answer_f1": 0.09523809523809523,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -758,7 +758,7 @@
     {
       "example_id": "hotpotqa_dev_092",
       "scores": {
-        "answer_f1": 0.4444444444444445,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 1.0
       }
@@ -766,7 +766,7 @@
     {
       "example_id": "hotpotqa_dev_093",
       "scores": {
-        "answer_f1": 0.22222222222222218,
+        "answer_f1": 0.21428571428571427,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -774,7 +774,7 @@
     {
       "example_id": "hotpotqa_dev_094",
       "scores": {
-        "answer_f1": 0.0,
+        "answer_f1": 0.07407407407407407,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -782,9 +782,9 @@
     {
       "example_id": "hotpotqa_dev_095",
       "scores": {
-        "answer_f1": 0.2857142857142857,
+        "answer_f1": 0.23076923076923078,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 1.0
+        "retrieval_recall@10": 0.5
       }
     },
     {
@@ -798,7 +798,7 @@
     {
       "example_id": "hotpotqa_dev_097",
       "scores": {
-        "answer_f1": 0.1,
+        "answer_f1": 0.0,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -806,7 +806,7 @@
     {
       "example_id": "hotpotqa_dev_098",
       "scores": {
-        "answer_f1": 0.04081632653061224,
+        "answer_f1": 0.11764705882352941,
         "citation_precision": 1.0,
         "retrieval_recall@10": 0.5
       }
@@ -814,9 +814,9 @@
     {
       "example_id": "hotpotqa_dev_099",
       "scores": {
-        "answer_f1": 0.1,
+        "answer_f1": 0.06666666666666667,
         "citation_precision": 1.0,
-        "retrieval_recall@10": 0.5
+        "retrieval_recall@10": 1.0
       }
     },
     {
@@ -828,7 +828,7 @@
       }
     }
   ],
-  "model": "gemini/gemini-2.5-flash-lite",
+  "model": "gemini/gemini-2.5-flash",
   "embedding_model": "nomic-ai/nomic-embed-text-v1.5",
-  "timestamp": "2026-06-11T16:17:35.550694+00:00"
+  "timestamp": "2026-06-11T18:14:00.415483+00:00"
 }
