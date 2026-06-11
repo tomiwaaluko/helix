@@ -27,6 +27,39 @@
 
 ---
 
+## 2026-06-11 07:00 UTC — Claude Code → next session
+
+**Last commit:** (see below) on `claude/eloquent-clarke-qiha1x`
+**Working tree:** clean after commit
+**Task plan position:** Task 14b — DONE (data generated + committed). All 18 slice tasks complete.
+
+**What shipped this session**
+- `evals/datasets/hotpotqa_dev_100.jsonl`: 100 HotpotQA distractor-dev questions (questions 0–99).
+- `evals/datasets/hotpotqa_dev_holdout_500.jsonl`: 500 sequestered holdout questions (100–599), disjoint.
+- `evals/datasets/hotpotqa_dev_holdout_500.sha256`: SHA-256 hash-lock (`e4b7c5a564ad…`).
+- All generated from `hotpotqa/hotpot_qa distractor/validation` via the fixed scripts on this branch.
+- Referential integrity verified against `data/corpus.jsonl` (5911 docs from 600 questions) for both sets.
+- `scripts/check_holdout_integrity.py` passes: `Holdout integrity OK`.
+- 84 tests pass, ruff clean, mypy --strict clean (27 files).
+
+**What's next**
+1. **Real baseline numbers**: on a machine with Qdrant + LLM key run `make dev && make seed && make eval`
+   to produce `evals/baselines/hotpotqa_dev_100_baseline.json` with real metrics + CIs. This container
+   lacks Nomic Embed download + LLM network access.
+2. `data/corpus.jsonl` is gitignored (data/ is in .gitignore) — the seeded corpus must be regenerated
+   on each fresh clone via `make seed` / `python scripts/prepare_corpus.py`.
+
+**Open questions / decisions pending**
+- (carried) `answer_f1` normalization is articles-only (canonical SQuAD), not general stopwords.
+- CLI `eval` does not persist per-example scores to SQLite; the JSON report is the artifact.
+
+**Gotchas hit**
+- `data/corpus.jsonl` produced 5911 docs (all unique paragraphs from 600 questions) — more than the
+  1–2k the spec estimated, but correct: the spec estimate assumed ~2 gold paragraphs/question × 500.
+  The actual context is 10 distractor paragraphs/question × 600 questions, deduped. Fine for eval.
+
+---
+
 ## 2026-06-11 05:30 UTC — Claude Code → next session
 
 **Last commit:** `cd96f54` on `claude/current-phase-gotchas-tjkwsu`
