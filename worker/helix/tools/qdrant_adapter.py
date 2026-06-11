@@ -129,6 +129,42 @@ class QdrantAdapter:
             attrs["count"] = len(results)
         return results
 
+    async def upsert_to(
+        self, collection_name: str, points: list[Point], *, batch_size: int = 100
+    ) -> None:
+        """Upsert directly into a named collection, bypassing the alias."""
+        from qdrant_client import models
+
+        for start in range(0, len(points), batch_size):
+            chunk = points[start : start + batch_size]
+            await self._client.upsert(
+                collection_name=collection_name,
+                points=[
+                    models.PointStruct(id=p.id, vector=p.vector, payload=p.payload) for p in chunk
+                ],
+            )
+
+    async def search_in(
+        self,
+        collection_name: str,
+        query_vector: list[float],
+        top_k: int = 10,
+    ) -> list[ScoredPoint]:
+        """Search a named collection directly, bypassing the alias."""
+        response = await self._client.query_points(
+            collection_name=collection_name,
+            query=query_vector,
+            limit=top_k,
+        )
+        return [
+            ScoredPoint(
+                id=hit.id if isinstance(hit.id, int | str) else str(hit.id),
+                score=hit.score,
+                payload=hit.payload or {},
+            )
+            for hit in response.points
+        ]
+
     async def aclose(self) -> None:
         await self._client.close()
 
