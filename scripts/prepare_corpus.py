@@ -12,9 +12,11 @@ from __future__ import annotations
 from helix.eval.corpus import build_corpus, write_corpus
 
 CORPUS_PATH = "data/corpus.jsonl"
-# Unique paragraphs from the first 500 distractor-dev questions reach ~1–2k docs;
-# we only evaluate on the first 100 (see prepare_hotpotqa.py).
-NUM_QUESTIONS = 500
+# The corpus must cover every question used by prepare_hotpotqa.py, which splits
+# dev = questions 0-100 and holdout = questions 100-600. So index the union: the
+# first 600 questions. (Under-covering silently breaks holdout referential
+# integrity — the holdout's supporting paragraphs would be absent.)
+NUM_QUESTIONS = 600
 
 
 def main() -> None:
