@@ -27,6 +27,60 @@
 
 ---
 
+## 2026-06-11 22:30 UTC — Claude Code → next session
+
+**Last commit:** `de5e697` on `claude/eloquent-clarke-qiha1x` (HANDOFF commit follows)
+**Working tree:** clean (after this HANDOFF commit)
+**Task plan position:** Fine-tune loop complete (Phases 0–4) **+ hybrid canary**.
+
+```
+$ git log -1 --oneline
+de5e697 feat(promotion): make the canary run the full hybrid pipeline
+$ git status --short
+(clean)
+```
+
+**What shipped this session**
+- **Hybrid canary** (`de5e697`) — the promotion gate now decides on full hybrid
+  (dense + BM25 + rerank) recall instead of dense-only, so a candidate whose dense
+  gain is washed out by the reranker is correctly *not* promoted.
+  - `worker/helix/cli.py`: `_build_promotion_backends` builds two `HybridRetriever`s
+    sharing one BM25 + reranker; only the dense embedder + target collection differ
+    (base→`corpus.active`, candidate→`corpus.candidate.<job_id>`). Returns
+    `(None, retrieve_fn)` so promotion still re-embeds via its default indexer.
+    New `_build_candidate_embedder` seam; doc-ids deduped order-preserving.
+  - `worker/helix/tools/qdrant_adapter.py`: `for_collection()` — sibling adapter
+    over the same client scoped to another collection.
+  - `promote.py`: `ACTIVE_ALIAS` made public.
+  - New integration test exercises the real hybrid retrieve_fn over embedded Qdrant+BM25.
+  - 132 tests, mypy --strict clean on 35 files.
+
+**What's next**
+- **Run the loop for real** (unchanged from below): `make seed` then `make finetune`.
+  First run downloads Nomic (~500 MB) + real gradient descent + mining eval over 1000
+  train questions (cached after first run).
+- **Two known canary limitations** (both documented in the slice plan / commit):
+  1. *Single-query vs decomposed.* The canary queries with the raw question, not the
+     workflow's decomposed sub-queries, so its absolute recall is a conservative proxy
+     for the `make eval` 0.69 — the before/after **delta** is the trustworthy signal.
+     To make it exact, run the full `deep_research` workflow over dev with deps pointed
+     at the candidate retriever (needs an `evaluate_fn`-shaped seam in promotion; bigger).
+  2. *Chained promotions.* The "before" arm uses the base embedder against `corpus.active`.
+     After a prior promotion, `corpus.active` was indexed with a *previously-promoted*
+     model, so the base embedder would mis-query it. Fine for the first finetune; for
+     repeated promotions, track the active embedder (e.g. on the `embedding_jobs` row).
+
+**Open questions / decisions pending**
+- (carried) `answer_f1` normalization is articles-only (canonical SQuAD), not general stopwords.
+- (carried) Should `make finetune` write a JSON run-summary report like `make eval` does?
+
+**Gotchas hit**
+- `ruff` ASYNC240 flags `pathlib.Path` I/O inside `async def` test bodies. Fixed by
+  making the hybrid-canary test sync and driving the awaits via `asyncio.run` on an
+  inner `_drive()` helper.
+
+---
+
 ## 2026-06-11 21:40 UTC — Claude Code → next session
 
 **Last commit:** `a3c5e08` on `claude/eloquent-clarke-qiha1x` (HANDOFF commit follows)
