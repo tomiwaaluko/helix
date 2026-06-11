@@ -99,3 +99,7 @@
   CLI test (`tests/test_cli.py`) drives the full pipeline with stubs and on-disk local Qdrant.
   `--no-cache` disables the LLM cache; adds `infra/compose/docker-compose.yml` so `make dev` boots
   Qdrant. This makes `make eval` real. (Task 18)
+- Fix the HotpotQA download in `scripts/prepare_corpus.py` and `scripts/prepare_hotpotqa.py`: the
+  dataset moved to the `hotpotqa/hotpot_qa` namespace (and to Parquet), so the bare `hotpot_qa` id
+  no longer resolves on the Hub. The pure parsers already handle the Parquet `context` /
+  `supporting_facts` shapes, so only the dataset id changed.
