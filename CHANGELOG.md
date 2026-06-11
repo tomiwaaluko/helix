@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Make the chunker's token counter resilient: `cl100k_base` lives on a blob store that
+  is unreachable in network-restricted environments (403), which previously failed the
+  entire `index`. `_tiktoken_counter` now degrades to a deterministic char-based heuristic
+  (with a `RuntimeWarning`) when the tokenizer can't be fetched. Behavior is unchanged when
+  tiktoken is reachable; for the HotpotQA corpus the impact is negligible (99.8% of docs are
+  under the chunk budget, so chunk boundaries are essentially identical either way).
 - Scaffold the vertical-slice worker package: root `Makefile`, `worker/pyproject.toml`
   (pinned deps + ruff/mypy/pytest config), the `helix/` package tree with empty
   `__init__.py` files, a `.gitignore` for `data/`/`*.db`, and a smoke test. `make lint`

@@ -8,7 +8,9 @@ the next so retrieval doesn't lose context that straddles a boundary.
 
 Token counting uses ``tiktoken`` (``cl100k_base``) — good enough for sizing and
 not tied to a specific model. The counter is injectable so tests run without the
-tokenizer.
+tokenizer; if ``cl100k_base`` cannot be fetched (its blob store may be blocked in
+network-restricted environments) the counter degrades to a char-based heuristic
+rather than failing the whole index.
 """
 
 from __future__ import annotations
@@ -32,10 +34,35 @@ class Chunk:
     token_count: int
 
 
-def _tiktoken_counter() -> TokenCounter:
-    import tiktoken
+def _heuristic_counter() -> TokenCounter:
+    """Dependency-free token estimate (~4 chars/token for English prose).
 
-    encoding = tiktoken.get_encoding("cl100k_base")
+    Used only as a fallback when ``cl100k_base`` cannot be fetched (it lives on a
+    blob store that may be unreachable in network-restricted environments). It is
+    a *sizing* approximation, which is all the chunker needs — see module docstring.
+    """
+
+    def count(text: str) -> int:
+        return max(1, (len(text) + 3) // 4)
+
+    return count
+
+
+def _tiktoken_counter() -> TokenCounter:
+    try:
+        import tiktoken
+
+        encoding = tiktoken.get_encoding("cl100k_base")
+    except Exception as exc:  # noqa: BLE001 - any download/import failure → heuristic
+        import warnings
+
+        warnings.warn(
+            f"tiktoken cl100k_base unavailable ({exc}); falling back to a heuristic "
+            "token counter for chunk sizing.",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+        return _heuristic_counter()
 
     def count(text: str) -> int:
         return len(encoding.encode(text))
