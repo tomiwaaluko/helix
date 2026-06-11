@@ -29,7 +29,7 @@
 
 ## 2026-06-11 04:38 UTC — Claude Code → next session
 
-**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Last commit:** `c67ccaf` on `claude/current-phase-gotchas-tjkwsu`
 **Working tree:** clean
 **Task plan position:** Task 17 (scorers) — DONE. Task 18 (CLI + end-to-end) next — the last
 slice task. (Task 14b holdout DATA still deferred — needs a seeded env; see prior entry.)
