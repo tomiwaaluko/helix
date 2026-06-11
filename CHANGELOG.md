@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Seed a mining/train split for the embedding fine-tune loop (Phase 0): `scripts/prepare_train_split.py`
+  writes `evals/datasets/hotpotqa_train_1000.jsonl` (HotpotQA distractor questions 600-1600), disjoint
+  from the dev set (0-100) and the sequestered holdout (100-600). Failures mined from this split train
+  the embedding model while `hotpotqa_dev_100` stays a fair held-out set for measuring recall@10 lift.
+  `scripts/prepare_corpus.py` now indexes the first 1600 questions (was 600) so the corpus covers all
+  three splits — referential integrity verified for dev/holdout/train (corpus grew 5911 → 15512 docs).
 - Make the eval harness resilient to per-example failures: `evaluate` now retries each
   example up to `max_attempts` (default 3) with exponential backoff, so a transient provider
   error on one question no longer aborts the whole batch. The backoff sleeps outside the

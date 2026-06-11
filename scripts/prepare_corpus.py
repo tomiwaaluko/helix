@@ -12,11 +12,13 @@ from __future__ import annotations
 from helix.eval.corpus import build_corpus, write_corpus
 
 CORPUS_PATH = "data/corpus.jsonl"
-# The corpus must cover every question used by prepare_hotpotqa.py, which splits
-# dev = questions 0-100 and holdout = questions 100-600. So index the union: the
-# first 600 questions. (Under-covering silently breaks holdout referential
-# integrity — the holdout's supporting paragraphs would be absent.)
-NUM_QUESTIONS = 600
+# The corpus must cover every question across all three splits:
+#   dev      = questions 0-100      (prepare_hotpotqa.py)
+#   holdout  = questions 100-600    (prepare_hotpotqa.py, sequestered)
+#   train    = questions 600-1600   (prepare_train_split.py, fine-tune mining)
+# So index the union: the first 1600 questions. (Under-covering silently breaks
+# referential integrity — a split's supporting paragraphs would be absent.)
+NUM_QUESTIONS = 1600
 
 
 def main() -> None:

@@ -48,6 +48,17 @@ def test_build_questions_slices_and_numbers() -> None:
     assert [r["input"]["question"] for r in rows] == ["q2", "q3"]
 
 
+def test_build_questions_train_split_is_prefixed_and_disjoint() -> None:
+    # The fine-tune mining split uses a distinct id prefix and a later offset, so
+    # its ids never collide with the dev split's.
+    examples = [dict(_EXAMPLE, question=f"q{i}") for i in range(5)]
+    dev = build_questions(examples, start=0, count=2)
+    train = build_questions(examples, start=2, count=2, id_prefix="hotpotqa_train")
+    assert [r["id"] for r in train] == ["hotpotqa_train_001", "hotpotqa_train_002"]
+    assert {r["input"]["question"] for r in train} == {"q2", "q3"}
+    assert set(r["id"] for r in dev).isdisjoint(r["id"] for r in train)
+
+
 def test_referential_integrity_with_corpus_builder() -> None:
     # The corpus built from the same example contains every supporting title.
     questions = build_questions([_EXAMPLE])
