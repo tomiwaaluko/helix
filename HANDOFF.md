@@ -27,6 +27,46 @@
 
 ---
 
+## 2026-06-11 04:38 UTC — Claude Code → next session
+
+**Last commit:** `<this commit>` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean
+**Task plan position:** Task 17 (scorers) — DONE. Task 18 (CLI + end-to-end) next — the last
+slice task. (Task 14b holdout DATA still deferred — needs a seeded env; see prior entry.)
+
+**What shipped this session** (ship-first; pure functions)
+- `helix/eval/scorers.py`: `answer_f1(example, prediction)` (token F1, canonical normalization),
+  `citation_precision(example, prediction)` → `ScoreResult` (vacuous 1.0 + `vacuous=True` when no
+  citations), `retrieval_recall_at_k(example, prediction, k=10)` → `ScoreResult` (gold doc_ids ∩
+  top-k `retrieved_doc_ids`), `retrieval_recall_scorer(k)` (binds k → 2-arg scorer), and
+  `default_scorers()` → `{"answer_f1", "citation_precision", "retrieval_recall@10"}`. Scorers read
+  the workflow `Answer` via `getattr` (text/citations/metadata), so they're decoupled from the type.
+- `tests/test_scorers.py`: exact/partial/zero F1, article+case normalization, citation
+  all/partial/vacuous, recall full/partial/k-cutoff/no-gold, and a harness-integration test that
+  runs all three default scorers through `evaluate`. Suite now 81 tests.
+
+**What's next**
+1. Task 18: `helix/cli.py` (the `python -m helix.cli ...` entry the Makefile already calls) —
+   `index` (wire `index_corpus`) and `eval` (load dataset → build retriever + `ResearchDeps` →
+   `using_research_deps` around `evaluate(lambda inp: deep_research.local(**inp), ..., default_scorers())`
+   → write baseline JSON). `--no-cache` sets `HELIX_LLM_CACHE=0`. This finally makes `make eval`
+   real. Then the end-to-end integration test.
+
+**Open questions / decisions pending**
+- **answer_f1 normalization:** I removed **articles only** (a/an/the), NOT general stopwords,
+  despite the spec text saying "articles and stopwords". The parenthetical "(standard HotpotQA
+  normalization)" is canonical SQuAD `normalize_answer`, which is articles-only; adding stopword
+  removal would break comparability with published HotpotQA baselines (the research thesis needs
+  comparable F1). Flagging in case you intended literal stopword stripping.
+- `retrieval_recall@10` scorer name contains `@` (matches the Makefile `--scorers` list and the
+  spec); it's a dict key/`eval_results.scorer` string, so no identifier issues.
+
+**Gotchas hit**
+- None new. Verified via `/tmp/helixvenv` (3.12): ruff clean, `mypy --strict helix/` clean
+  (26 files), 81 pytest pass.
+
+---
+
 ## 2026-06-10 23:03 UTC — Claude Code → next session
 
 **Last commit:** `cb5150e` on `claude/current-phase-gotchas-tjkwsu`
