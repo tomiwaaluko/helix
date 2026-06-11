@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Enable LiteLLM's provider retries in the LLM adapter: pass `num_retries` (default 4,
+  override via `HELIX_LLM_NUM_RETRIES`) to `acompletion` so transient provider errors
+  (503/429/timeouts) are retried with exponential backoff instead of aborting a 100-question
+  eval on the first blip. The adapter still implements no retry loop of its own — LiteLLM owns
+  the backoff, consistent with the cache/metering/replay design. `num_retries` is not part of
+  the cache key (it does not affect output).
 - Pin `einops` in the worker dependencies: the Nomic Embed v1.5 remote modeling code
   imports it, so a clean checkout failed at the first `embed_documents` without it.
 - Make the chunker's token counter resilient: `cl100k_base` lives on a blob store that

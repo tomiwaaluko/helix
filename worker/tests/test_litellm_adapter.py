@@ -136,3 +136,26 @@ async def test_model_resolves_from_env(tmp_path: Path, monkeypatch: pytest.Monke
     )
     assert resp.model == "env-model"
     assert fake.calls[0]["model"] == "env-model"
+
+
+async def test_num_retries_forwarded_to_litellm(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("HELIX_LLM_NUM_RETRIES", raising=False)
+    fake = FakeLLM()
+    common = dict(
+        cache=LLMCache(tmp_path / "c"),
+        span_logger=SpanLogger(tmp_path / "s.jsonl"),
+        completion_fn=fake,
+        cost_fn=_fake_cost,
+    )
+    # Default retry budget is handed to LiteLLM so it owns transient-error backoff.
+    await llm_call(_MSGS, model="m", **common)  # type: ignore[arg-type]
+    assert fake.calls[0]["num_retries"] == 4
+
+    # Env override is honored; explicit argument wins over the env.
+    monkeypatch.setenv("HELIX_LLM_NUM_RETRIES", "7")
+    await llm_call([{"role": "user", "content": "b"}], model="m", **common)  # type: ignore[arg-type]
+    assert fake.calls[1]["num_retries"] == 7
+    await llm_call([{"role": "user", "content": "c"}], model="m", num_retries=1, **common)  # type: ignore[arg-type]
+    assert fake.calls[2]["num_retries"] == 1

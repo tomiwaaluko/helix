@@ -1,9 +1,11 @@
 """LiteLLM tool adapter.
 
 A thin async wrapper around LiteLLM's ``acompletion`` that emits a ``kind="llm"``
-span and goes through the disk-backed cache. The adapter never retries (LiteLLM
-owns provider retries) and never talks to a provider directly — all model calls
-go through LiteLLM so the cache, metering, and (future) replay stay correct.
+span and goes through the disk-backed cache. The adapter never implements its own
+retry loop — it asks LiteLLM to own provider retries via ``num_retries`` (LiteLLM
+retries retryable errors such as 503/429/timeouts with exponential backoff). It
+never talks to a provider directly — all model calls go through LiteLLM so the
+cache, metering, and (future) replay stay correct.
 
 The LiteLLM call and cost functions are lazily imported and injectable, so the
 adapter is unit-testable without the dependency installed or a network/API key.
@@ -20,7 +22,19 @@ from helix.logging import SpanLogger
 from helix.tools.llm_cache import LLMCache, cache_enabled
 
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
+_DEFAULT_NUM_RETRIES = 4
 _DEFAULT_LOGGER = SpanLogger()
+
+
+def _default_num_retries() -> int:
+    """LiteLLM retry budget for transient provider errors (``HELIX_LLM_NUM_RETRIES``)."""
+    raw = os.environ.get("HELIX_LLM_NUM_RETRIES")
+    if raw is None:
+        return _DEFAULT_NUM_RETRIES
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return _DEFAULT_NUM_RETRIES
 
 
 @dataclass
@@ -61,6 +75,7 @@ async def llm_call(
     max_tokens: int | None = None,
     top_p: float | None = None,
     stop: list[str] | str | None = None,
+    num_retries: int | None = None,
     cache: LLMCache | None = None,
     span_logger: SpanLogger | None = None,
     completion_fn: Callable[..., Awaitable[Any]] | None = None,
@@ -103,6 +118,7 @@ async def llm_call(
         else:
             acompletion = completion_fn or _lazy_acompletion()
             cost = cost_fn or _lazy_cost()
+            retries = num_retries if num_retries is not None else _default_num_retries()
             raw = await acompletion(
                 model=model,
                 messages=messages,
@@ -110,6 +126,7 @@ async def llm_call(
                 max_tokens=max_tokens,
                 top_p=top_p,
                 stop=stop,
+                num_retries=retries,
             )
             text, prompt_tokens, completion_tokens = _extract(raw)
             resp = LLMResponse(
