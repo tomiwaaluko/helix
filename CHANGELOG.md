@@ -1,5 +1,16 @@
 ## Unreleased
 
+- Add the promotion + canary-eval phase (Phase 3): `helix/rag/promotion/promote.py` —
+  `promote_candidate()` re-indexes the full corpus with the candidate checkpoint into
+  `corpus.candidate.<job_id>`, measures retrieval_recall@10 before (current `corpus.active`,
+  baseline embedder) and after (candidate embedder, new collection) with 95% bootstrap CIs,
+  then atomically swaps `corpus.active` to the candidate via `set_alias` only when
+  `after.mean > before.mean`; otherwise archives. The job record in `embedding_jobs` is updated
+  to `promoted` or `archived` with full CI metrics and `artifact_uri` regardless of outcome.
+  Adds `upsert_to()` and `search_in()` to `QdrantAdapter` for explicit-collection access that
+  bypasses the alias during indexing and retrieval. Both heavy operations (`index_fn`,
+  `retrieve_fn`) are injectable so 12 new tests run without a model or Qdrant instance.
+  129 total tests, mypy --strict clean on 35 files. (Phase 3)
 - Add the embedding trainer (Phase 2): `helix/rag/trainer/` — `triplets.py` turns mined
   `FailureCase` records into prefixed `(query, gold_passage, hard_negatives)` contrastive
   triplets (Nomic `search_query:`/`search_document:` prefixes applied here, reused from

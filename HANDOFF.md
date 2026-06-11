@@ -27,6 +27,57 @@
 
 ---
 
+## 2026-06-11 21:00 UTC — Claude Code → next session
+
+**Last commit:** `07546a9` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** clean (after CHANGELOG + HANDOFF commit)
+**Task plan position:** Phases 0–3 of the fine-tune loop complete.
+
+```
+$ git log -1 --oneline
+07546a9 feat(promotion): add canary-eval promotion phase (Phase 3)
+$ git status --short
+(clean)
+```
+
+**What shipped this session**
+- **Phase 3 — Promotion + canary eval** (`07546a9`)
+  - `worker/helix/rag/promotion/promote.py`: `promote_candidate()` — re-indexes corpus
+    with candidate checkpoint into `corpus.candidate.<job_id>`, measures recall@10
+    before/after with bootstrap 95% CIs, alias-swaps `corpus.active` only on strict lift
+    (after.mean > before.mean), updates `embedding_jobs` status to promoted/archived.
+  - `worker/helix/tools/qdrant_adapter.py`: added `upsert_to()` and `search_in()` for
+    explicit-collection access (bypasses alias during indexing and canary retrieval).
+  - `worker/tests/test_promotion.py`: 12 tests (promoted / archived / tied / empty guard /
+    job status transitions / metrics structure / evaluating-before-index ordering).
+  - 129 tests, mypy --strict clean on 35 files.
+
+**Loop components shipped (Phases 0-3)**
+| Phase | Commit | Description |
+|-------|--------|-------------|
+| 0 | `9d8c8dd` | Disjoint train split: `hotpotqa_train_1000.jsonl` (questions 600-1600) |
+| 1 | `a80b06f` | Failure miner: 4-signature classifier + `mine_failures()` + SQLite `failure_cases` |
+| 2 | `c397646` | Embedding trainer: `build_triplets()` + `train_embedding()` + SQLite `embedding_jobs` |
+| 3 | `07546a9` | Promotion: `promote_candidate()` + CI comparison + alias swap |
+
+**What's next**
+- **Phase 4 — CLI orchestration**: `python -m helix.cli finetune --train <split> --eval <split>`
+  command wiring Phases 1→3 into one job; `make finetune` target. This closes the loop end-to-end
+  and lets the user run the full fine-tune experiment from the command line.
+
+**Open questions / decisions pending**
+- (carried) `answer_f1` normalization is articles-only (canonical SQuAD), not general stopwords.
+- (carried) Retrieval ran with heuristic token counter (cl100k blocked); production seeding may
+  produce slightly different chunk boundaries.
+
+**Gotchas**
+- `ASYNC230` lint rule fires when `open()` is called inline in an async function. Fixed by
+  extracting to `_load_jsonl()` sync helper (same pattern as `indexer.py`).
+- `_bootstrap_ci` and `_aggregate` in `harness.py` are private; re-implemented in `promote.py`
+  rather than coupling to internals.
+
+---
+
 ## 2026-06-11 18:20 UTC — Claude Code → next session
 
 **Last commit:** (see below) on `claude/eloquent-clarke-qiha1x`
