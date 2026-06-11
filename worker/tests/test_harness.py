@@ -160,6 +160,70 @@ async def test_evaluate_raises_after_exhausting_attempts(tmp_path: Path) -> None
         await evaluate(always_fails, dataset, {"exact": _exact}, max_attempts=2, retry_backoff=0.0)
 
 
+async def test_evaluate_tolerates_per_example_failures(tmp_path: Path) -> None:
+    """tolerate_failures=True skips exhausted examples instead of aborting."""
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 4)
+    dataset = load_dataset(path)
+
+    async def sometimes_fails(example_input: Any) -> dict[str, int]:
+        if example_input["x"] == 2:
+            raise RuntimeError("persistent 503")
+        return {"y": example_input["x"] * 2}
+
+    report = await evaluate(
+        sometimes_fails,
+        dataset,
+        {"exact": _exact},
+        max_attempts=1,
+        retry_backoff=0.0,
+        tolerate_failures=True,
+    )
+    assert report.examples_skipped == 1
+    assert len(report.per_example) == 3  # 4 examples − 1 skipped
+    assert report.metrics["exact"]["n"] == 3
+    assert report.metrics["exact"]["mean"] == 1.0  # all non-skipped passed
+    skipped_ids = {r["example_id"] for r in report.per_example}
+    assert "ex_002" not in skipped_ids  # x=2 was the failing example
+
+
+async def test_evaluate_tolerates_all_failures(tmp_path: Path) -> None:
+    """When every example fails and tolerate_failures=True, return empty report."""
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 3)
+    dataset = load_dataset(path)
+
+    async def always_fails(example_input: Any) -> dict[str, int]:
+        raise RuntimeError("total outage")
+
+    report = await evaluate(
+        always_fails,
+        dataset,
+        {"exact": _exact},
+        max_attempts=1,
+        retry_backoff=0.0,
+        tolerate_failures=True,
+    )
+    assert report.examples_skipped == 3
+    assert report.per_example == []
+    assert report.metrics["exact"]["n"] == 0
+
+
+async def test_evaluate_default_raises_even_with_one_failure(tmp_path: Path) -> None:
+    """Without tolerate_failures the default all-or-nothing behaviour is preserved."""
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 3)
+    dataset = load_dataset(path)
+
+    async def one_bad(example_input: Any) -> dict[str, int]:
+        if example_input["x"] == 1:
+            raise RuntimeError("503")
+        return {"y": example_input["x"] * 2}
+
+    with pytest.raises(RuntimeError, match="503"):
+        await evaluate(one_bad, dataset, {"exact": _exact}, max_attempts=1, retry_backoff=0.0)
+
+
 def test_sha256_file_is_stable(tmp_path: Path) -> None:
     path = tmp_path / "f.bin"
     path.write_bytes(b"helix")

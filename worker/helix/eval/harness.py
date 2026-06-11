@@ -60,6 +60,7 @@ class EvalReport:
     eval_id: str
     metrics: dict[str, dict[str, float]]
     per_example: list[dict[str, Any]]
+    examples_skipped: int = 0
 
     def to_json(self, path: str | PathLike[str]) -> None:
         destination = Path(path)
@@ -161,6 +162,7 @@ async def evaluate(
     seed: int = 0,
     max_attempts: int = 3,
     retry_backoff: float = 2.0,
+    tolerate_failures: bool = False,
 ) -> EvalReport:
     """Run ``workflow_fn`` over the dataset, score, persist, and aggregate.
 
@@ -170,6 +172,12 @@ async def evaluate(
     so a retried example reuses sub-calls that already succeeded and only re-issues
     the one that failed. The backoff sleep happens outside the concurrency
     semaphore so a stalled example does not block the others.
+
+    When ``tolerate_failures=True``, examples that exhaust all retry attempts are
+    silently skipped instead of aborting the run; the count is recorded in
+    ``EvalReport.examples_skipped``. This is intended for mining runs where partial
+    results are preferable to a full abort. Leave it ``False`` (the default) for
+    baseline eval commands where every example must succeed.
     """
     run_id = eval_id or new_id()
     semaphore = asyncio.Semaphore(concurrency)
@@ -185,8 +193,13 @@ async def evaluate(
                 await asyncio.sleep(retry_backoff * 2 ** (attempt - 1))
         raise AssertionError("unreachable")  # pragma: no cover
 
-    async def run_one(example: Example) -> dict[str, Any]:
-        output = await _run_workflow_with_retries(example)
+    async def run_one(example: Example) -> dict[str, Any] | None:
+        try:
+            output = await _run_workflow_with_retries(example)
+        except Exception:
+            if not tolerate_failures:
+                raise
+            return None
         scores: dict[str, float] = {}
         for name, scorer in scorers.items():
             score, details = _as_score(scorer(example, output))
@@ -195,7 +208,11 @@ async def evaluate(
                 await store.store_eval_result(run_id, example.id, name, score, details)
         return {"example_id": example.id, "scores": scores}
 
-    per_example = list(await asyncio.gather(*(run_one(example) for example in dataset)))
+    raw: list[dict[str, Any] | None] = list(
+        await asyncio.gather(*(run_one(example) for example in dataset))
+    )
+    per_example: list[dict[str, Any]] = [r for r in raw if r is not None]
+    skipped = len(raw) - len(per_example)
 
     metrics = {
         name: _aggregate(
@@ -205,4 +222,9 @@ async def evaluate(
         )
         for name in scorers
     }
-    return EvalReport(eval_id=run_id, metrics=metrics, per_example=per_example)
+    return EvalReport(
+        eval_id=run_id,
+        metrics=metrics,
+        per_example=per_example,
+        examples_skipped=skipped,
+    )

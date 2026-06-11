@@ -330,6 +330,7 @@ class FinetuneResult:
     triplets_built: int
     output_dir: str | None
     metrics: dict[str, Any] | None
+    failures_skipped: int = 0  # mining-eval examples skipped due to provider errors
 
 
 async def _finetune(
@@ -387,13 +388,17 @@ async def _finetune(
                     concurrency=concurrency,
                     store=store,
                     eval_id=f"finetune-mining-{job_id}",
+                    tolerate_failures=True,
                 )
+            skipped = report.examples_skipped
             eval_results = await store.get_eval_results(report.eval_id)
             cases = mine_failures(train_dataset, eval_results, corpus, spans_path=spans_path)
             await store.save_failure_cases([to_store_row(case) for case in cases])
             if not cases:
                 await store.update_embedding_job(job_id, status="archived")
-                return FinetuneResult(job_id, "no_failures", 0, 0, None, None)
+                return FinetuneResult(
+                    job_id, "no_failures", 0, 0, None, None, failures_skipped=skipped
+                )
 
             # --- Phase 2: train — triplets → fine-tuned candidate checkpoint ---
             await store.update_embedding_job(job_id, status="training")
@@ -402,7 +407,9 @@ async def _finetune(
             )
             if not triplets:
                 await store.update_embedding_job(job_id, status="archived")
-                return FinetuneResult(job_id, "no_triplets", len(cases), 0, None, None)
+                return FinetuneResult(
+                    job_id, "no_triplets", len(cases), 0, None, None, failures_skipped=skipped
+                )
             train_embedding(
                 triplets,
                 output_dir,
@@ -443,6 +450,7 @@ async def _finetune(
             triplets_built=len(triplets),
             output_dir=output_dir,
             metrics=promote_result.metrics,
+            failures_skipped=skipped,
         )
 
 
@@ -668,6 +676,8 @@ def finetune(
     click.echo(f"Fine-tune job {result.job_id}: {result.status}")
     click.echo(f"  failures mined: {result.failures_mined}")
     click.echo(f"  triplets built: {result.triplets_built}")
+    if result.failures_skipped:
+        click.echo(f"  examples skipped (provider errors): {result.failures_skipped}")
     if result.metrics is not None:
         before = result.metrics["before"]["mean"]
         after = result.metrics["after"]["mean"]

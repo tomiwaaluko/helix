@@ -417,6 +417,84 @@ def test_cli_finetune_archives_when_no_failures(monkeypatch: pytest.MonkeyPatch)
         assert captured["trained"] is False
 
 
+def test_cli_finetune_reports_skipped_examples(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When the mining eval skips examples, failures_skipped appears in the CLI output."""
+
+    import helix.eval.harness as harness_mod
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("corpus.jsonl").write_text("\n".join(json.dumps(d) for d in _DOCS), encoding="utf-8")
+        Path("train.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in _TRAIN_DATASET), encoding="utf-8"
+        )
+        Path("eval.jsonl").write_text("\n".join(json.dumps(e) for e in _DATASET), encoding="utf-8")
+        _patch_factories(monkeypatch)
+        _patch_finetune_backends(monkeypatch)
+
+        index_result = runner.invoke(
+            cli,
+            [
+                "index",
+                "--corpus",
+                "corpus.jsonl",
+                "--collection",
+                "corpus.base",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--vector-size",
+                str(_DIM),
+                "--bm25",
+                "bm25.pkl",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert index_result.exit_code == 0, index_result.output
+
+        # Wrap `evaluate` to inject `examples_skipped=1` on the first (mining) call.
+        _original_evaluate = harness_mod.evaluate
+
+        async def _patched_evaluate(*args: Any, **kwargs: Any) -> Any:
+            report = await _original_evaluate(*args, **kwargs)
+            report.examples_skipped = 1  # simulate one provider-error skip
+            return report
+
+        monkeypatch.setattr(cli_mod, "evaluate", _patched_evaluate)
+
+        result = runner.invoke(
+            cli,
+            [
+                "finetune",
+                "--train",
+                "train.jsonl",
+                "--eval",
+                "eval.jsonl",
+                "--corpus",
+                "corpus.jsonl",
+                "--concurrency",
+                "1",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--bm25",
+                "bm25.pkl",
+                "--top-k",
+                "2",
+                "--epochs",
+                "1",
+                "--batch-size",
+                "2",
+                "--db",
+                "helix.db",
+                "--no-cache",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "examples skipped (provider errors): 1" in result.output
+
+
 def test_promotion_hybrid_retrieve_fn_routes_and_dedupes(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
