@@ -814,7 +814,13 @@ them, and promote the candidate only if it measurably improves recall.
    `corpus.candidate.<job_id>` Qdrant collection, measure `retrieval_recall@10` on the dev split
    before/after with bootstrap CIs, and atomically swap the `corpus.active` alias **only on a
    positive lift** (otherwise archive). The `embedding_jobs` row records the full before/after
-   metrics and final status (`promoted` / `archived`).
+   metrics and final status (`promoted` / `archived`). The canary runs the **full hybrid pipeline**
+   (dense + BM25 + rerank), not dense retrieval in isolation: both arms share the BM25 index and
+   reranker and differ only in the dense embedder + its target collection, so the promotion
+   decision reflects end-to-end recall — a candidate whose dense gain is washed out by the reranker
+   is correctly *not* promoted. (The canary uses the question as a single query rather than the
+   workflow's decomposed sub-queries, so its absolute recall is a conservative proxy for the full
+   `make eval` number; the before/after delta is the controlled, attributable signal.)
 
 **Split discipline.** Mining draws from train-1000 (questions 600–1600); the canary measures on
 dev-100 (questions 0–100); the holdout-500 (questions 100–600) stays sequestered for

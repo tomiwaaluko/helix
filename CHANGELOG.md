@@ -1,5 +1,15 @@
 ## Unreleased
 
+- Make the promotion canary run the **full hybrid pipeline** (dense + BM25 + rerank) instead of
+  dense-only retrieval, so the promote/archive decision reflects end-to-end recall: a candidate
+  whose dense gain is washed out by the reranker is no longer promoted. The CLI's
+  `_build_promotion_backends` now builds two `HybridRetriever`s sharing one BM25 index + reranker,
+  differing only in the dense embedder and its target collection (base model over `corpus.active`,
+  the fine-tuned checkpoint over `corpus.candidate.<job_id>`); doc-ids are deduped order-preserving
+  to match how the workflow builds `retrieved_doc_ids`. Adds `QdrantAdapter.for_collection()` (a
+  sibling adapter scoped to another collection over the same client) and a `_build_candidate_embedder`
+  CLI seam. New integration test drives the real hybrid retrieve_fn over embedded Qdrant + BM25.
+  132 total tests, mypy --strict clean.
 - Add the `finetune` CLI command + `make finetune` (Phase 4): orchestrates the full
   mine → train → promote loop end-to-end against one `embedding_jobs` row.
   `python -m helix.cli finetune --train <split> --eval <split> --corpus <path>` evaluates the

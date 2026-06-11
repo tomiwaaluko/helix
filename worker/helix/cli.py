@@ -39,7 +39,14 @@ from helix.logging import SpanLogger
 from helix.rag.chunker import Chunk, TokenCounter, chunk_document
 from helix.rag.indexer import IndexResult, index_corpus
 from helix.rag.miner.miner import mine_failures, to_store_row
-from helix.rag.promotion.promote import IndexFn, PromoteConfig, RetrieveFn, promote_candidate
+from helix.rag.promotion.promote import (
+    ACTIVE_ALIAS,
+    IndexFn,
+    PromoteConfig,
+    RetrieveFn,
+    candidate_collection,
+    promote_candidate,
+)
 from helix.rag.retriever import HybridRetriever
 from helix.rag.trainer.train import TrainConfig, train_embedding
 from helix.rag.trainer.train import TrainFn as _TrainFn
@@ -67,6 +74,11 @@ SUPPORTED_WORKFLOWS = ("deep_research",)
 
 def _build_embedder(span_logger: SpanLogger) -> Embedder:
     return Embedder(span_logger=span_logger)
+
+
+def _build_candidate_embedder(checkpoint_dir: str, span_logger: SpanLogger) -> Embedder:
+    """The fine-tuned candidate embedder, loaded from a checkpoint dir (stubbed in tests)."""
+    return Embedder(model_name=checkpoint_dir, span_logger=span_logger)
 
 
 def _build_adapter(span_logger: SpanLogger, *, url: str, path: str | None) -> QdrantAdapter:
@@ -108,10 +120,49 @@ def _train_backend() -> _TrainFn | None:
 
 
 def _build_promotion_backends(
-    checkpoint_dir: str, adapter: QdrantAdapter, config: PromoteConfig
+    *,
+    checkpoint_dir: str,
+    adapter: QdrantAdapter,
+    candidate_collection: str,
+    bm25_path: str,
+    top_k: int,
+    span_logger: SpanLogger,
 ) -> tuple[IndexFn | None, RetrieveFn | None]:
-    """Return (index_fn, retrieve_fn) for promotion; ``(None, None)`` uses the real defaults."""
-    return None, None
+    """Return (index_fn, retrieve_fn) for the promotion canary.
+
+    The canary runs the *full hybrid pipeline* (dense + BM25 + rerank) so the
+    promotion decision reflects end-to-end retrieval, not dense recall in
+    isolation: a candidate that improves dense recall but is washed out by the
+    reranker should not be promoted. Both arms share the BM25 index and reranker
+    (model-independent); only the dense embedder and its target collection differ:
+
+    * ``corpus.active`` → base embedder over the live alias (matches ``make eval``).
+    * candidate collection → the fine-tuned checkpoint over its fresh collection.
+
+    Returns ``None`` for ``index_fn`` so promotion re-embeds the corpus with the
+    candidate model via its default indexer; only retrieval is overridden here.
+    """
+    bm25 = BM25Index.load(bm25_path)
+    reranker = _build_reranker()
+    base_retriever = HybridRetriever(
+        _build_embedder(span_logger), adapter, bm25, reranker, span_logger=span_logger
+    )
+    candidate_retriever = HybridRetriever(
+        _build_candidate_embedder(checkpoint_dir, span_logger),
+        adapter.for_collection(candidate_collection),
+        bm25,
+        reranker,
+        span_logger=span_logger,
+    )
+
+    async def _retrieve(query: str, collection: str, k: int) -> list[str]:
+        retriever = base_retriever if collection == ACTIVE_ALIAS else candidate_retriever
+        docs = await retriever.retrieve(query, top_k=k)
+        # Doc-level, order-preserving dedup — matches how the workflow builds
+        # Answer.metadata["retrieved_doc_ids"], so recall is measured identically.
+        return list(dict.fromkeys(doc.id for doc in docs))
+
+    return None, _retrieve
 
 
 # --- Shared helpers ----------------------------------------------------------
@@ -365,7 +416,14 @@ async def _finetune(
 
             # --- Phase 3: promote — canary-eval on the dev split, swap on lift ---
             eval_dataset = load_dataset(eval_dataset_path)
-            index_fn, retrieve_fn = _build_promotion_backends(output_dir, adapter, promote_config)
+            index_fn, retrieve_fn = _build_promotion_backends(
+                checkpoint_dir=output_dir,
+                adapter=adapter,
+                candidate_collection=candidate_collection(job_id),
+                bm25_path=bm25_path,
+                top_k=top_k,
+                span_logger=span_logger,
+            )
             promote_result = await promote_candidate(
                 output_dir,
                 corpus_path,

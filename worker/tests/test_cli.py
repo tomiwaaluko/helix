@@ -264,7 +264,15 @@ def _patch_finetune_backends(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
 
     monkeypatch.setattr(cli_mod, "_train_backend", lambda: _stub_train_fn)
 
-    def _build_backends(checkpoint_dir: str, adapter: Any, config: Any) -> tuple[Any, Any]:
+    def _build_backends(
+        *,
+        checkpoint_dir: str,
+        adapter: Any,
+        candidate_collection: str,
+        bm25_path: str,
+        top_k: int,
+        span_logger: Any,
+    ) -> tuple[Any, Any]:
         async def _index(corpus_path: str, collection: str) -> None:
             captured["indexed"].append((corpus_path, collection))
             # Create the (empty) collection so the real alias swap on promotion resolves.
@@ -407,3 +415,81 @@ def test_cli_finetune_archives_when_no_failures(monkeypatch: pytest.MonkeyPatch)
         assert result.exit_code == 0, result.output
         assert "no_failures" in result.output
         assert captured["trained"] is False
+
+
+def test_promotion_hybrid_retrieve_fn_routes_and_dedupes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The real canary retrieve_fn runs the full hybrid pipeline against the right collection.
+
+    Exercises ``_build_promotion_backends`` end-to-end (HybridRetriever + RRF + rerank)
+    over real embedded Qdrant + BM25 — only the embedder model load is stubbed — and
+    verifies the active vs candidate routing and doc-level dedup.
+    """
+    import asyncio
+
+    import helix.cli as c
+    from helix.rag.chunker import chunk_document
+    from helix.rag.indexer import index_corpus
+    from helix.tools.bm25 import BM25Index
+    from helix.tools.embedder import Embedder
+    from helix.tools.qdrant_adapter import QdrantAdapter
+
+    pytest.importorskip("qdrant_client")
+    from qdrant_client import AsyncQdrantClient
+
+    monkeypatch.setattr(
+        c, "_build_embedder", lambda sl: Embedder(span_logger=sl, encode_fn=_encode)
+    )
+    monkeypatch.setattr(
+        c,
+        "_build_candidate_embedder",
+        lambda ckpt, sl: Embedder(span_logger=sl, encode_fn=_encode),
+    )
+    monkeypatch.setattr(c, "_build_reranker", lambda: Reranker(predict_fn=_overlap))
+
+    async def _drive() -> tuple[list[str], list[str]]:
+        embedder = Embedder(encode_fn=_encode)
+        chunks = [
+            chunk
+            for d in _DOCS
+            for chunk in chunk_document(d["id"], d["text"], d["source"], token_counter=_words)
+        ]
+        BM25Index.build(chunks).save("bm25.pkl")
+        adapter = QdrantAdapter(client=AsyncQdrantClient(path="qdrant_promo"))
+        # Live collection behind corpus.active, and a separate candidate collection.
+        await index_corpus(
+            "corpus.jsonl", "corpus.base", embedder=embedder, adapter=adapter, vector_size=_DIM
+        )
+        await index_corpus(
+            "corpus.jsonl",
+            "corpus.candidate.jobX",
+            embedder=embedder,
+            adapter=adapter,
+            alias="corpus.candidate.jobX",
+            vector_size=_DIM,
+        )
+        _, retrieve_fn = c._build_promotion_backends(
+            checkpoint_dir="ckpt",
+            adapter=adapter,
+            candidate_collection="corpus.candidate.jobX",
+            bm25_path="bm25.pkl",
+            top_k=3,
+            span_logger=c._span_logger(None),
+        )
+        assert retrieve_fn is not None
+        active = await retrieve_fn("apple varieties", "corpus.active", 3)
+        candidate = await retrieve_fn("apple varieties", "corpus.candidate.jobX", 3)
+        await adapter.aclose()
+        return active, candidate
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("corpus.jsonl").write_text("\n".join(json.dumps(d) for d in _DOCS), encoding="utf-8")
+        active_hits, candidate_hits = asyncio.run(_drive())
+
+    # Both arms return real doc_ids from the corpus, deduped (no repeats).
+    for hits in (active_hits, candidate_hits):
+        assert hits, "hybrid retrieve returned nothing"
+        assert len(hits) == len(set(hits)), "doc_ids were not deduped"
+        assert all(h in {d["id"] for d in _DOCS} for h in hits)

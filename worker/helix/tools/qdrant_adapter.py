@@ -64,6 +64,16 @@ class QdrantAdapter:
             client = AsyncQdrantClient(url=url)
         self._client = client
 
+    def for_collection(self, collection_alias: str) -> QdrantAdapter:
+        """A sibling adapter over the same client, scoped to a different collection/alias.
+
+        Used by the promotion canary to query a specific ``corpus.candidate.<job_id>``
+        collection through the same hybrid retrieval code that talks to ``corpus.active``.
+        """
+        return QdrantAdapter(
+            client=self._client, collection_alias=collection_alias, span_logger=self._spans
+        )
+
     async def create_collection(
         self, name: str, vector_size: int, distance: str = "Cosine"
     ) -> None:

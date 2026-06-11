@@ -41,7 +41,7 @@ IndexFn = Callable[[str, str], Awaitable[None]]
 RetrieveFn = Callable[[str, str, int], Awaitable[list[str]]]
 
 _POINT_NAMESPACE = uuid.UUID("a4f0c8d2-6b1e-4e3a-9c7d-0e1f2a3b4c5d")
-_ACTIVE_ALIAS = "corpus.active"
+ACTIVE_ALIAS = "corpus.active"
 
 
 def _load_jsonl(path: str) -> list[dict[str, Any]]:
@@ -166,7 +166,7 @@ def _make_default_retrieve_fn(
     candidate_embedder = Embedder(model_name=checkpoint_dir)
 
     async def _retrieve(query: str, collection: str, k: int) -> list[str]:
-        if collection == _ACTIVE_ALIAS:
+        if collection == ACTIVE_ALIAS:
             vec = baseline_embedder.embed_queries([query])[0]
             results = await adapter.search(vec, top_k=k)
         else:
@@ -217,7 +217,7 @@ async def promote_candidate(
     before_scores: list[float] = []
     for ex in examples:
         gold = _gold_doc_ids(ex)
-        retrieved = await _retrieve(str(ex.input.get("question", "")), _ACTIVE_ALIAS, cfg.top_k)
+        retrieved = await _retrieve(str(ex.input.get("question", "")), ACTIVE_ALIAS, cfg.top_k)
         before_scores.append(_recall_at_k(retrieved, gold, cfg.top_k))
 
     # Step 3: after recall — candidate collection with candidate embedder
@@ -235,7 +235,7 @@ async def promote_candidate(
     status = "promoted" if promoted else "archived"
 
     if promoted:
-        await adapter.set_alias(_ACTIVE_ALIAS, coll)
+        await adapter.set_alias(ACTIVE_ALIAS, coll)
 
     metrics: dict[str, Any] = {
         "before": before_ci,
