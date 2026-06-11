@@ -27,6 +27,66 @@
 
 ---
 
+## 2026-06-11 16:20 UTC — Claude Code → next session
+
+**Last commit:** `0ccd040` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** clean
+**Task plan position:** **SLICE COMPLETE.** The headline deliverable — real baseline eval
+numbers — is produced, committed, and pushed. All 18 tasks done + the baseline run.
+
+```
+$ git log -1 --oneline
+0ccd040 feat(eval): add HotpotQA dev-100 baseline results — the slice deliverable
+$ git status --short
+(clean)
+```
+
+**What shipped this session** (ran the full pipeline end-to-end on a configured env)
+- **The baseline** (`evals/baselines/hotpotqa_dev_100_baseline.json`, n=100):
+  - `answer_f1`: 0.176 [0.148, 0.206]
+  - `citation_precision`: 0.919 [0.871, 0.963]
+  - `retrieval_recall@10`: 0.660 [0.615, 0.710]  ← non-zero on 98/100, wiring confirmed
+  - Embedding: `nomic-ai/nomic-embed-text-v1.5`. LLM: `gemini/gemini-2.5-flash-lite`.
+- **Four fixes found by actually running it** (each committed + pushed separately):
+  1. `983ae14` chunker: degrade to a heuristic token counter when `cl100k_base` is unfetchable
+     (its Azure blob 403s in network-restricted envs). Negligible impact here — 99.8% of docs
+     are under the chunk budget.
+  2. `4368a59` deps: pin `einops` (Nomic's `trust_remote_code` modeling code imports it).
+  3. `39c6595` llm adapter: pass `num_retries` (default 4, `HELIX_LLM_NUM_RETRIES`) so LiteLLM
+     retries transient 503/429/timeouts with backoff.
+  4. `97c7626` harness: retry each example up to `max_attempts` (default 3) with backoff so one
+     transient provider error no longer aborts all 100; cached sub-calls are reused on retry.
+- Index built **5911 docs / 5937 chunks** into `corpus.base` (embedded Qdrant at `data/qdrant`).
+- Gates green: holdout integrity OK, ruff clean, `mypy --strict` clean (27 files), **87 tests**.
+
+**What's next**
+1. **Model caveat:** the baseline LLM is `gemini-2.5-flash-lite`, not the playbook's
+   `gemini-2.5-flash` — flash AND pro were under a sustained 503 "high demand" throttle during
+   the run (persisted through 6 LiteLLM retries). If you want the flash baseline, rerun
+   `make eval`-style with `--model gemini/gemini-2.5-flash` when the throttle clears; the cache
+   keys on model name so it re-pays for calls (expected). `answer_f1` may rise with a stronger model.
+2. **`answer_f1` is low (0.18)** — expected for a first baseline with a small model + extractive
+   SQuAD-style F1 normalization. It's the starting point the fine-tune loop will lift, not a bug.
+   `citation_precision` (0.92) and `recall@10` (0.66) are healthy.
+
+**Open questions / decisions pending**
+- (carried) `answer_f1` normalization is articles-only (canonical SQuAD), not general stopwords.
+- The retrieval pipeline ran with the heuristic token counter (cl100k blocked). For a canonical
+  run, allowlist `openaipublic.blob.core.windows.net` so tiktoken loads; impact is negligible here.
+
+**Gotchas hit**
+- **Gemini "high demand" 503s are sustained, not spiky** — they persisted across flash/pro for
+  minutes and survived 6 LiteLLM retries. The fix that actually got the run through was the
+  *harness* example-level retry (it re-runs the whole example, reusing cached sub-calls) at
+  concurrency 2 on flash-lite. If you hit this again: lower concurrency, lean on the cache.
+- **Embedding 5937 chunks on CPU (no GPU) took ~20 min.** The indexer embeds all chunks in memory
+  then upserts once, so Qdrant looks empty until the very end — that's not a hang.
+- `data/` is gitignored: `corpus.jsonl`, `data/qdrant`, `bm25_index.pkl`, `llm_cache`, spans all
+  live there and must be regenerated on a fresh clone (`prepare_corpus.py` → `prepare_hotpotqa.py`
+  → `index`). Only the datasets and the baseline JSON are committed.
+
+---
+
 ## 2026-06-11 07:00 UTC — Claude Code → next session
 
 **Last commit:** (see below) on `claude/eloquent-clarke-qiha1x`
