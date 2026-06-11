@@ -159,14 +159,34 @@ async def evaluate(
     eval_id: str | None = None,
     bootstrap_samples: int = 1000,
     seed: int = 0,
+    max_attempts: int = 3,
+    retry_backoff: float = 2.0,
 ) -> EvalReport:
-    """Run ``workflow_fn`` over the dataset, score, persist, and aggregate."""
+    """Run ``workflow_fn`` over the dataset, score, persist, and aggregate.
+
+    Each example is attempted up to ``max_attempts`` times with exponential
+    backoff (``retry_backoff`` seconds, doubling) so a transient provider error
+    on one example does not abort the whole batch. Workflow LLM calls are cached,
+    so a retried example reuses sub-calls that already succeeded and only re-issues
+    the one that failed. The backoff sleep happens outside the concurrency
+    semaphore so a stalled example does not block the others.
+    """
     run_id = eval_id or new_id()
     semaphore = asyncio.Semaphore(concurrency)
 
+    async def _run_workflow_with_retries(example: Example) -> Any:
+        for attempt in range(1, max_attempts + 1):
+            try:
+                async with semaphore:
+                    return await workflow_fn(example.input)
+            except Exception:
+                if attempt == max_attempts:
+                    raise
+                await asyncio.sleep(retry_backoff * 2 ** (attempt - 1))
+        raise AssertionError("unreachable")  # pragma: no cover
+
     async def run_one(example: Example) -> dict[str, Any]:
-        async with semaphore:
-            output = await workflow_fn(example.input)
+        output = await _run_workflow_with_retries(example)
         scores: dict[str, float] = {}
         for name, scorer in scorers.items():
             score, details = _as_score(scorer(example, output))

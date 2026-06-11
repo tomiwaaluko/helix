@@ -1,5 +1,10 @@
 ## Unreleased
 
+- Make the eval harness resilient to per-example failures: `evaluate` now retries each
+  example up to `max_attempts` (default 3) with exponential backoff, so a transient provider
+  error on one question no longer aborts the whole batch. The backoff sleeps outside the
+  concurrency semaphore, and because workflow LLM calls are cached, a retried example reuses
+  the sub-calls that already succeeded and only re-issues the failed one.
 - Enable LiteLLM's provider retries in the LLM adapter: pass `num_retries` (default 4,
   override via `HELIX_LLM_NUM_RETRIES`) to `acompletion` so transient provider errors
   (503/429/timeouts) are retried with exponential backoff instead of aborting a 100-question

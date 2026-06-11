@@ -130,6 +130,40 @@ async def test_evaluate_is_deterministic(tmp_path: Path) -> None:
     assert first.metrics == second.metrics  # same seed → identical bootstrap CI
 
 
+async def test_evaluate_retries_transient_failures(tmp_path: Path) -> None:
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 3)
+    dataset = load_dataset(path)
+    calls: dict[int, int] = {}
+
+    async def flaky(example_input: Any) -> dict[str, int]:
+        x = int(example_input["x"])
+        calls[x] = calls.get(x, 0) + 1
+        if calls[x] < 3:  # fail twice, succeed on the third attempt
+            raise RuntimeError("transient 503")
+        return {"y": 2 * x}
+
+    report = await evaluate(
+        flaky, dataset, {"exact": _exact}, max_attempts=3, retry_backoff=0.0
+    )
+    assert report.metrics["exact"]["mean"] == 1.0  # every example eventually succeeded
+    assert all(c == 3 for c in calls.values())
+
+
+async def test_evaluate_raises_after_exhausting_attempts(tmp_path: Path) -> None:
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 2)
+    dataset = load_dataset(path)
+
+    async def always_fails(example_input: Any) -> dict[str, int]:
+        raise RuntimeError("persistent outage")
+
+    with pytest.raises(RuntimeError, match="persistent outage"):
+        await evaluate(
+            always_fails, dataset, {"exact": _exact}, max_attempts=2, retry_backoff=0.0
+        )
+
+
 def test_sha256_file_is_stable(tmp_path: Path) -> None:
     path = tmp_path / "f.bin"
     path.write_bytes(b"helix")
