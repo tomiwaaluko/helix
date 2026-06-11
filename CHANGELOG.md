@@ -103,3 +103,6 @@
   dataset moved to the `hotpotqa/hotpot_qa` namespace (and to Parquet), so the bare `hotpot_qa` id
   no longer resolves on the Hub. The pure parsers already handle the Parquet `context` /
   `supporting_facts` shapes, so only the dataset id changed.
+- Fix corpus coverage in `scripts/prepare_corpus.py`: build from the first 600 questions (not 500)
+  so the corpus covers the union of the dev (0–100) and holdout (100–600) splits. Under-covering
+  silently failed holdout referential integrity (the holdout's supporting paragraphs were absent).
