@@ -91,3 +91,11 @@
   `citation_precision` (fraction of cited doc_ids that are gold; vacuous 1.0 when no citations),
   and `retrieval_recall_at_k` (gold doc_ids found in the top-k `retrieved_doc_ids`), plus
   `default_scorers()` keyed for the harness. (Task 17)
+- Add the slice CLI (`helix.cli`, `python -m helix.cli`): `index` (chunk + embed a corpus into
+  Qdrant and write the BM25 sidecar), `eval` (run `deep_research` over a dataset, score with the
+  selected scorers, write the baseline JSON report with bootstrap CIs + model/embedding/timestamp
+  metadata), and `run` (answer one question). Heavy components (embedder, Qdrant adapter, reranker,
+  LLM completion, token counter) come from monkeypatchable module-level factories so the end-to-end
+  CLI test (`tests/test_cli.py`) drives the full pipeline with stubs and on-disk local Qdrant.
+  `--no-cache` disables the LLM cache; adds `infra/compose/docker-compose.yml` so `make dev` boots
+  Qdrant. This makes `make eval` real. (Task 18)
