@@ -86,3 +86,8 @@
   `harness.py`. `scripts/prepare_hotpotqa.py` extended to emit the 500-question holdout + a
   `.sha256` lock; `scripts/check_holdout_integrity.py` (run in `make lint`, skips if absent); and
   a `holdout-guard.yml` CI workflow that rejects unauthorized holdout filename references. (Task 14b)
+- Add the eval scorers (`helix.eval.scorers`): `answer_f1` (token-level F1 with canonical
+  HotpotQA/SQuAD normalization — lowercase, punctuation-split, articles removed),
+  `citation_precision` (fraction of cited doc_ids that are gold; vacuous 1.0 when no citations),
+  and `retrieval_recall_at_k` (gold doc_ids found in the top-k `retrieved_doc_ids`), plus
+  `default_scorers()` keyed for the harness. (Task 17)
