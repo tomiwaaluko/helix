@@ -1,5 +1,14 @@
 ## Unreleased
 
+- Add the embedding trainer (Phase 2): `helix/rag/trainer/` — `triplets.py` turns mined
+  `FailureCase` records into prefixed `(query, gold_passage, hard_negatives)` contrastive
+  triplets (Nomic `search_query:`/`search_document:` prefixes applied here, reused from
+  `embedder.py`), dropping cases with no gold text or no resolvable hard negative. `train.py`
+  fine-tunes Nomic Embed v1.5 with `MultipleNegativesRankingLoss` (InfoNCE) and saves the
+  candidate checkpoint; the training backend is injectable (`train_fn`) so tests run without the
+  0.5 GB model, and the default backend seeds torch/numpy/python RNGs for reproducible candidates.
+  Adds an `embedding_jobs` SQLite table (`create/update/get_embedding_job`, status lifecycle with
+  auto `promoted_at`) mirroring `data-model.md`. 12 new tests; 114 total, mypy --strict clean. (Phase 2)
 - Add the failure miner (Phase 1): `helix/rag/miner/` — a four-signature rule classifier
   (`lexical_only`, `semantic_mismatch`, `multi_hop_miss`, `ambiguous`) in `signatures.py`, and
   `mine_failures` in `miner.py` which joins `data/spans.jsonl` retrieval spans to per-example

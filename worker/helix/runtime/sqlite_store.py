@@ -81,7 +81,24 @@ CREATE TABLE IF NOT EXISTS failure_cases (
 );
 CREATE INDEX IF NOT EXISTS failure_cases_signature_idx ON failure_cases (signature);
 CREATE INDEX IF NOT EXISTS failure_cases_mined_idx ON failure_cases (mined_at DESC);
+
+CREATE TABLE IF NOT EXISTS embedding_jobs (
+  id TEXT PRIMARY KEY,
+  base_model TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  config TEXT NOT NULL,
+  triplets_count INTEGER,
+  metrics TEXT,
+  artifact_uri TEXT,
+  created_at TEXT NOT NULL,
+  promoted_at TEXT
+);
 """
+
+# Fine-tune job lifecycle (mirrors the target-state embedding_job_status enum).
+EMBEDDING_JOB_STATUSES = frozenset(
+    {"queued", "mining", "training", "evaluating", "promoted", "archived", "failed"}
+)
 
 
 @dataclass(frozen=True)
@@ -138,6 +155,19 @@ class FailureCaseRow:
     retrieved_top_k: list[dict[str, Any]]
     signature: str
     mined_at: str
+
+
+@dataclass(frozen=True)
+class EmbeddingJobRow:
+    id: str
+    base_model: str
+    status: str
+    config: dict[str, Any]
+    triplets_count: int | None
+    metrics: dict[str, Any] | None
+    artifact_uri: str | None
+    created_at: str
+    promoted_at: str | None
 
 
 def _new_id() -> str:
@@ -421,6 +451,80 @@ class SqliteStore:
                 rows = await cur.fetchall()
         return [_row_to_failure_case(row) for row in rows]
 
+    # ---- embedding jobs -----------------------------------------------------
+
+    async def create_embedding_job(
+        self,
+        base_model: str,
+        config: dict[str, Any],
+        *,
+        job_id: str | None = None,
+        status: str = "queued",
+    ) -> EmbeddingJobRow:
+        jid = job_id or _new_id()
+        created_at = _now()
+        await self._db.execute(
+            "INSERT INTO embedding_jobs (id, base_model, status, config, created_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (jid, base_model, status, json.dumps(config), created_at),
+        )
+        await self._db.commit()
+        return EmbeddingJobRow(
+            id=jid,
+            base_model=base_model,
+            status=status,
+            config=config,
+            triplets_count=None,
+            metrics=None,
+            artifact_uri=None,
+            created_at=created_at,
+            promoted_at=None,
+        )
+
+    async def update_embedding_job(
+        self,
+        job_id: str,
+        *,
+        status: str | None = None,
+        triplets_count: int | None = None,
+        metrics: dict[str, Any] | None = None,
+        artifact_uri: str | None = None,
+        promoted_at: str | None = None,
+    ) -> None:
+        """Partial update; ``None`` arguments leave the column unchanged.
+
+        Sets ``promoted_at`` automatically when ``status`` becomes ``promoted``.
+        """
+        sets: list[str] = []
+        params: list[Any] = []
+        if status is not None:
+            sets.append("status = ?")
+            params.append(status)
+            if status == "promoted" and promoted_at is None:
+                promoted_at = _now()
+        if triplets_count is not None:
+            sets.append("triplets_count = ?")
+            params.append(triplets_count)
+        if metrics is not None:
+            sets.append("metrics = ?")
+            params.append(json.dumps(metrics))
+        if artifact_uri is not None:
+            sets.append("artifact_uri = ?")
+            params.append(artifact_uri)
+        if promoted_at is not None:
+            sets.append("promoted_at = ?")
+            params.append(promoted_at)
+        if not sets:
+            return
+        params.append(job_id)
+        await self._db.execute(f"UPDATE embedding_jobs SET {', '.join(sets)} WHERE id = ?", params)
+        await self._db.commit()
+
+    async def get_embedding_job(self, job_id: str) -> EmbeddingJobRow | None:
+        async with self._db.execute("SELECT * FROM embedding_jobs WHERE id = ?", (job_id,)) as cur:
+            row = await cur.fetchone()
+        return _row_to_embedding_job(row) if row is not None else None
+
     # ---- datasets -----------------------------------------------------------
 
     async def register_dataset(
@@ -507,4 +611,18 @@ def _row_to_failure_case(row: aiosqlite.Row) -> FailureCaseRow:
         retrieved_top_k=json.loads(row["retrieved_top_k"]),
         signature=row["signature"],
         mined_at=row["mined_at"],
+    )
+
+
+def _row_to_embedding_job(row: aiosqlite.Row) -> EmbeddingJobRow:
+    return EmbeddingJobRow(
+        id=row["id"],
+        base_model=row["base_model"],
+        status=row["status"],
+        config=_loads(row["config"]),
+        triplets_count=row["triplets_count"],
+        metrics=_loads_opt(row["metrics"]),
+        artifact_uri=row["artifact_uri"],
+        created_at=row["created_at"],
+        promoted_at=row["promoted_at"],
     )
