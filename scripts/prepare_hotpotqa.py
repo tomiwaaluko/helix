@@ -44,7 +44,9 @@ def _validate(questions: list[dict[str, object]], label: str) -> None:
 def main() -> None:
     from datasets import load_dataset
 
-    dataset = load_dataset("hotpot_qa", "distractor", split="validation")
+    # See prepare_corpus.py: the dataset moved to `hotpotqa/hotpot_qa` (Parquet).
+    # build_questions handles the Parquet supporting_facts shape.
+    dataset = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
 
     dev = build_questions(dataset, start=0, count=DEV_COUNT)
     _validate(dev, "dev")

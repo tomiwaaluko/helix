@@ -20,7 +20,10 @@ NUM_QUESTIONS = 500
 def main() -> None:
     from datasets import load_dataset
 
-    dataset = load_dataset("hotpot_qa", "distractor", split="validation")
+    # The dataset moved to the `hotpotqa/` namespace (and to Parquet); the bare
+    # `hotpot_qa` id no longer resolves on the Hub. build_corpus handles the
+    # Parquet context shape.
+    dataset = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
     docs = build_corpus(dataset, limit=NUM_QUESTIONS)
     count = write_corpus(docs, CORPUS_PATH)
     print(f"Wrote {count} documents to {CORPUS_PATH}")
