@@ -27,6 +27,66 @@
 
 ---
 
+## 2026-06-11 21:40 UTC — Claude Code → next session
+
+**Last commit:** `a3c5e08` on `claude/eloquent-clarke-qiha1x` (HANDOFF commit follows)
+**Working tree:** clean (after this HANDOFF commit)
+**Task plan position:** **Fine-tune loop complete (Phases 0–4).** The self-improving
+RAG loop deferred in the original M0 plan is now built and orchestrated end-to-end.
+
+```
+$ git log -1 --oneline
+a3c5e08 feat(cli): add finetune command orchestrating the full loop (Phase 4)
+$ git status --short
+(clean)
+```
+
+**What shipped this session**
+- **Phase 4 — CLI orchestration** (`a3c5e08`)
+  - `worker/helix/cli.py`: new `finetune` command + `_finetune()` async core wiring
+    mine → train → promote against one `embedding_jobs` row; `FinetuneResult` summary.
+  - Factory seams `_build_store`, `_train_backend`, `_build_promotion_backends` (mirror
+    the existing `_build_*` pattern) keep the loop model-free in tests.
+  - `Makefile`: `make finetune` target (train=train_1000, eval=dev_100, corpus=data/corpus.jsonl).
+  - `docs/vertical-slice-plan.md`: un-deferred the loop, added "Fine-tune loop (slice extension)".
+  - `worker/tests/test_cli.py`: 2 end-to-end tests (full promoted loop + no-failures archive),
+    real embedded Qdrant + BM25, stubbed LLM/train/promotion backends.
+  - 131 tests, mypy --strict clean on 35 files.
+
+**Full loop now on disk (Phases 0-4)**
+| Phase | Commit | Description |
+|-------|--------|-------------|
+| 0 | `9d8c8dd` | Disjoint train split `hotpotqa_train_1000.jsonl` (q 600-1600) |
+| 1 | `a80b06f` | Failure miner: 4-signature classifier + `mine_failures()` + `failure_cases` |
+| 2 | `c397646` | Embedding trainer: `build_triplets()` + `train_embedding()` + `embedding_jobs` |
+| 3 | `07546a9` | Promotion: `promote_candidate()` + CI comparison + alias swap |
+| 4 | `a3c5e08` | CLI `finetune` + `make finetune` — orchestrates 1→3 |
+
+**What's next**
+- **Run the loop for real.** `make finetune` has only been exercised with stubbed backends.
+  A real run needs: `make seed` (corpus + dev split indexed), then `make finetune`. First run
+  downloads Nomic (~500 MB) and does real gradient descent — budget GPU time + LLM cost for the
+  mining eval over 1000 train questions (cached after first run).
+- **Faithfulness note on the canary:** the promotion canary measures *dense-only* recall@10
+  (`adapter.search` / `search_in`), isolating the embedding's contribution but NOT running the
+  full hybrid (BM25 + dense + rerank) pipeline. So canary "before" recall won't equal the headline
+  0.69 hybrid baseline. If the next agent wants a hybrid canary, swap promotion's default
+  `retrieve_fn` for one that drives `HybridRetriever` against the candidate collection.
+
+**Open questions / decisions pending**
+- (carried) `answer_f1` normalization is articles-only (canonical SQuAD), not general stopwords.
+- Should `make finetune` write a JSON summary report (like `make eval` does) for the run record?
+  Currently it only echoes to stdout and persists to the `embedding_jobs` row.
+
+**Gotchas hit**
+- Promotion's alias swap (`set_alias`) fails if the candidate collection doesn't exist. In the
+  full-loop test the stubbed `index_fn` must still `create_collection` (empty) so the real swap
+  resolves — production `index_fn` creates it as part of indexing.
+- The mining eval and `mine_failures` must share the same `--spans` path; `spans.jsonl` is
+  append-only, so a fresh file per finetune run avoids stale question→trace joins.
+
+---
+
 ## 2026-06-11 21:00 UTC — Claude Code → next session
 
 **Last commit:** `07546a9` on `claude/eloquent-clarke-qiha1x`
