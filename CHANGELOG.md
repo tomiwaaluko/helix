@@ -1,5 +1,7 @@
 ## Unreleased
 
+- Pin `einops` in the worker dependencies: the Nomic Embed v1.5 remote modeling code
+  imports it, so a clean checkout failed at the first `embed_documents` without it.
 - Make the chunker's token counter resilient: `cl100k_base` lives on a blob store that
   is unreachable in network-restricted environments (403), which previously failed the
   entire `index`. `_tiktoken_counter` now degrades to a deterministic char-based heuristic
