@@ -27,6 +27,76 @@
 
 ---
 
+## 2026-06-11 05:30 UTC — Claude Code → next session
+
+**Last commit:** `cd96f54` on `claude/current-phase-gotchas-tjkwsu`
+**Working tree:** clean (`git status` → nothing to commit)
+**Task plan position:** Task 18 (CLI + end-to-end) — DONE. **All 18 slice implementation tasks are
+now complete.** Remaining slice gap: Task 14b holdout DATA generation (needs a seeded env with
+`datasets` + the real HotpotQA download — see below).
+
+```
+$ git log -1 --oneline
+cd96f54 feat(cli): index/eval/run end-to-end CLI + integration test (Task 18)
+$ git status --short
+(clean)
+```
+
+**What shipped this session** (ship-first; self-contained)
+- `helix/cli.py` (`python -m helix.cli`), three Click commands:
+  - `index --corpus --collection [--vector-size --max-tokens --overlap-tokens --bm25 --qdrant-url
+    --alias --spans]`: runs `index_corpus` (Qdrant dense) and writes the BM25 sidecar to
+    `data/bm25_index.pkl` from the *same* chunks (same token counter + chunk params, so chunk_ids
+    line up for RRF fusion).
+  - `eval --workflow --dataset --scorers --concurrency --output [--qdrant-url --bm25 --top-k
+    --model --no-cache --spans]`: loads dataset → builds `HybridRetriever` + `ResearchDeps` →
+    `using_research_deps` around `evaluate(_run_workflow, ...)` → writes baseline JSON
+    (`eval_id, workflow, dataset, n, metrics, per_example, model, embedding_model, timestamp`).
+    `--no-cache` sets `HELIX_LLM_CACHE=0`. Echoes mean + [ci_low, ci_high] per scorer.
+  - `run --input '{"question": "..."}'`: single question, prints answer text + cited doc_ids.
+- **Factory hooks** (`_build_embedder/_build_adapter/_build_reranker/_build_completion_fns/
+  _token_counter`) are module-level so tests monkeypatch them — the only seam needed to run the
+  whole pipeline with stubs and no GPU/server/network.
+- `tests/test_cli.py`: end-to-end `index`→`eval` through `CliRunner` with on-disk **local** Qdrant
+  (`AsyncQdrantClient(path=...)`) so the collection survives between the two invocations; plus an
+  unknown-workflow rejection test and a `run` test. Suite now **84 tests**.
+- `infra/compose/docker-compose.yml`: the Qdrant service `make dev` already referenced but that was
+  missing on disk (`qdrant/qdrant:v1.12.0`, ports 6333/6334, named volume, TCP healthcheck).
+- Verified on Python 3.12 (`/tmp/helixvenv`): `ruff check .` clean, `mypy --strict helix/` clean
+  (27 files), 84 tests pass. No stray `data/` written by the suite.
+
+**What's next**
+1. **Task 14b holdout DATA** (still deferred — needs network + `datasets`): run
+   `python scripts/prepare_hotpotqa.py` in a seeded env to emit + commit
+   `evals/datasets/hotpotqa_dev_100.jsonl`, the `hotpotqa_dev_holdout_500.jsonl`, and its `.sha256`
+   lock. Until then `make lint`'s holdout integrity check skips (by design) and `make eval` has no
+   dataset to read.
+2. **Real baseline numbers** (the actual slice deliverable): on a machine with Qdrant + an LLM key,
+   `make dev && make seed && make eval` to produce `evals/baselines/hotpotqa_dev_100_baseline.json`
+   with real `answer_f1 / citation_precision / retrieval_recall@10` + CIs. Sandbox can't (no
+   Nomic/reranker download, no LLM network).
+
+**Open questions / decisions pending**
+- (carried) **answer_f1 normalization** is articles-only (canonical SQuAD), not general stopwords —
+  see prior entry. Still flagged.
+- CLI `eval` does **not** persist per-example scores to SQLite (`evaluate(store=...)` left `None`);
+  the JSON report is the artifact. Wire a `SqliteStore` through if you want the `eval_results` table
+  populated for the dashboard later.
+
+**Gotchas hit**
+- **In-memory Qdrant is per-client**: `index` and `eval` are separate `AsyncQdrantClient` instances,
+  so `:memory:` would lose the collection between them. The CLI test uses on-disk **local mode**
+  (`path=...`), which persists across the two sequential commands (each opens→writes/reads→closes).
+  In production this is moot — Qdrant is a shared server behind `--qdrant-url`.
+- `index` chunks the corpus **twice** (once inside `index_corpus` for Qdrant, once in the CLI for
+  BM25). Intentional, to keep `index_corpus` (Task 10) untouched; both use the same params so the
+  chunk_ids match. If this ever bothers you, have `index_corpus` return its chunks.
+- `make lint` runs `scripts/check_holdout_integrity.py` from the **repo root**, which imports
+  `helix` — that only works if the package is importable (editable install or `PYTHONPATH=worker`).
+  The ad-hoc venv here needs `PYTHONPATH=worker`; CI/the maintainer's env has it installed.
+
+---
+
 ## 2026-06-11 04:38 UTC — Claude Code → next session
 
 **Last commit:** `c67ccaf` on `claude/current-phase-gotchas-tjkwsu`
