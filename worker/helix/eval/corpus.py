@@ -94,3 +94,15 @@ def load_corpus_ids(path: str | PathLike[str]) -> set[str]:
             if stripped:
                 ids.add(str(json.loads(stripped)["id"]))
     return ids
+
+
+def load_corpus(path: str | PathLike[str]) -> dict[str, str]:
+    """Return ``{doc_id: text}`` for every doc in a corpus JSONL file."""
+    corpus: dict[str, str] = {}
+    with Path(path).open(encoding="utf-8") as handle:
+        for line in handle:
+            stripped = line.strip()
+            if stripped:
+                row = json.loads(stripped)
+                corpus[str(row["id"])] = str(row["text"])
+    return corpus

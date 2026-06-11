@@ -143,9 +143,7 @@ async def test_evaluate_retries_transient_failures(tmp_path: Path) -> None:
             raise RuntimeError("transient 503")
         return {"y": 2 * x}
 
-    report = await evaluate(
-        flaky, dataset, {"exact": _exact}, max_attempts=3, retry_backoff=0.0
-    )
+    report = await evaluate(flaky, dataset, {"exact": _exact}, max_attempts=3, retry_backoff=0.0)
     assert report.metrics["exact"]["mean"] == 1.0  # every example eventually succeeded
     assert all(c == 3 for c in calls.values())
 
@@ -159,9 +157,7 @@ async def test_evaluate_raises_after_exhausting_attempts(tmp_path: Path) -> None
         raise RuntimeError("persistent outage")
 
     with pytest.raises(RuntimeError, match="persistent outage"):
-        await evaluate(
-            always_fails, dataset, {"exact": _exact}, max_attempts=2, retry_backoff=0.0
-        )
+        await evaluate(always_fails, dataset, {"exact": _exact}, max_attempts=2, retry_backoff=0.0)
 
 
 def test_sha256_file_is_stable(tmp_path: Path) -> None:

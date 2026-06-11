@@ -68,6 +68,19 @@ CREATE TABLE IF NOT EXISTS datasets (
   content_hash TEXT NOT NULL,
   UNIQUE(name, version)
 );
+
+CREATE TABLE IF NOT EXISTS failure_cases (
+  id TEXT PRIMARY KEY,
+  example_id TEXT NOT NULL,
+  span_id TEXT NOT NULL,
+  query TEXT NOT NULL,
+  gold_doc_id TEXT NOT NULL,
+  retrieved_top_k TEXT NOT NULL,
+  signature TEXT NOT NULL,
+  mined_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS failure_cases_signature_idx ON failure_cases (signature);
+CREATE INDEX IF NOT EXISTS failure_cases_mined_idx ON failure_cases (mined_at DESC);
 """
 
 
@@ -113,6 +126,18 @@ class DatasetRow:
     path: str
     size: int
     content_hash: str
+
+
+@dataclass(frozen=True)
+class FailureCaseRow:
+    id: str
+    example_id: str
+    span_id: str
+    query: str
+    gold_doc_id: str
+    retrieved_top_k: list[dict[str, Any]]
+    signature: str
+    mined_at: str
 
 
 def _new_id() -> str:
@@ -358,6 +383,44 @@ class SqliteStore:
             rows = await cur.fetchall()
         return [_row_to_eval_result(row) for row in rows]
 
+    # ---- failure cases ------------------------------------------------------
+
+    async def save_failure_cases(self, cases: list[FailureCaseRow]) -> None:
+        """Persist a batch of mined failure cases (idempotent on id)."""
+        for case in cases:
+            await self._db.execute(
+                "INSERT INTO failure_cases "
+                "(id, example_id, span_id, query, gold_doc_id,"
+                " retrieved_top_k, signature, mined_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(id) DO NOTHING",
+                (
+                    case.id,
+                    case.example_id,
+                    case.span_id,
+                    case.query,
+                    case.gold_doc_id,
+                    json.dumps(case.retrieved_top_k),
+                    case.signature,
+                    case.mined_at,
+                ),
+            )
+        await self._db.commit()
+
+    async def get_failure_cases(self, *, signature: str | None = None) -> list[FailureCaseRow]:
+        """Return all failure cases, optionally filtered by signature."""
+        if signature is not None:
+            async with self._db.execute(
+                "SELECT * FROM failure_cases WHERE signature = ? ORDER BY mined_at DESC",
+                (signature,),
+            ) as cur:
+                rows = await cur.fetchall()
+        else:
+            async with self._db.execute(
+                "SELECT * FROM failure_cases ORDER BY mined_at DESC"
+            ) as cur:
+                rows = await cur.fetchall()
+        return [_row_to_failure_case(row) for row in rows]
+
     # ---- datasets -----------------------------------------------------------
 
     async def register_dataset(
@@ -431,4 +494,17 @@ def _row_to_dataset(row: aiosqlite.Row) -> DatasetRow:
         path=row["path"],
         size=row["size"],
         content_hash=row["content_hash"],
+    )
+
+
+def _row_to_failure_case(row: aiosqlite.Row) -> FailureCaseRow:
+    return FailureCaseRow(
+        id=row["id"],
+        example_id=row["example_id"],
+        span_id=row["span_id"],
+        query=row["query"],
+        gold_doc_id=row["gold_doc_id"],
+        retrieved_top_k=json.loads(row["retrieved_top_k"]),
+        signature=row["signature"],
+        mined_at=row["mined_at"],
     )

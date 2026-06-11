@@ -1,5 +1,14 @@
 ## Unreleased
 
+- Add the failure miner (Phase 1): `helix/rag/miner/` — a four-signature rule classifier
+  (`lexical_only`, `semantic_mismatch`, `multi_hop_miss`, `ambiguous`) in `signatures.py`, and
+  `mine_failures` in `miner.py` which joins `data/spans.jsonl` retrieval spans to per-example
+  eval results, identifies missed gold passages (recall < 1.0), classifies each failure, and
+  returns `FailureCase` records carrying the representative query, missed gold doc, text, ranked
+  retrieved set, and up to `max_hard_negatives` retrieved-but-wrong doc_ids for the trainer.
+  Adds a `failure_cases` SQLite table to `sqlite_store.py` with idempotent `save_failure_cases`
+  / `get_failure_cases` (filter by signature). Adds `load_corpus` to `helix/eval/corpus.py`.
+  14 new unit tests; all 102 tests pass, mypy --strict clean on 30 files. (Phase 1)
 - Seed a mining/train split for the embedding fine-tune loop (Phase 0): `scripts/prepare_train_split.py`
   writes `evals/datasets/hotpotqa_train_1000.jsonl` (HotpotQA distractor questions 600-1600), disjoint
   from the dev set (0-100) and the sequestered holdout (100-600). Failures mined from this split train
