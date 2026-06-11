@@ -32,7 +32,7 @@ Everything else (LiteLLM, Nomic Embed, BGE reranker, sentence-transformers) is u
 - Multi-worker / multi-process execution.
 - Checkpointing, dead-letter queue, retry with backoff.
 - Dashboard (web/).
-- Failure mining and embedding fine-tuning (the loop's consumer side). This slice produces the traces and eval results that the miner will later consume.
+- ~~Failure mining and embedding fine-tuning (the loop's consumer side). This slice produces the traces and eval results that the miner will later consume.~~ **Built as a slice extension** (post-M0): the full mine → train → promote loop now lives in `worker/helix/rag/{miner,trainer,promotion}/` and is orchestrated end-to-end by `python -m helix.cli finetune` / `make finetune`. See "Fine-tune loop (slice extension)" below.
 - Replay.
 
 ## Directory structure
@@ -789,3 +789,36 @@ python -m helix.cli run \
 4. Spans are logged to `data/spans.jsonl` with correct parent-child nesting.
 5. `ruff check`, `mypy --strict`, and `pytest` pass.
 6. The whole pipeline (index + eval) completes in under 30 minutes on a machine with a consumer GPU (for embedding) and API access (for LLM calls).
+
+## Fine-tune loop (slice extension)
+
+Originally deferred (see "What we defer"), the self-improving RAG loop is now built
+as a single-process extension of the slice. It closes the experiment the runtime
+exists to enable: mine retrieval failures from traces, fine-tune the embedder on
+them, and promote the candidate only if it measurably improves recall.
+
+**One command:** `python -m helix.cli finetune --train <split> --eval <split> --corpus <path>`
+(wrapped by `make finetune`) runs three phases in order against one `embedding_jobs` row:
+
+1. **Mine** (`helix/rag/miner/`) — evaluate the disjoint train split
+   (`hotpotqa_train_1000.jsonl`, questions 600–1600) through the *current* retrieval
+   pipeline, persisting per-example results and spans. Examples with `retrieval_recall@10 < 1.0`
+   yield one `FailureCase` per missed gold doc, each classified by a four-signature rule set
+   (`lexical_only`, `semantic_mismatch`, `multi_hop_miss`, `ambiguous`) and carrying the
+   retrieved-but-wrong docs as hard negatives. Persisted to the `failure_cases` table.
+2. **Train** (`helix/rag/trainer/`) — turn failure cases into prefixed
+   `(query, gold, hard_negatives)` contrastive triplets and fine-tune Nomic Embed v1.5 with
+   `MultipleNegativesRankingLoss` (InfoNCE), saving the candidate checkpoint to
+   `data/models/<job_id>/`. The training backend is injectable; RNGs are seeded for reproducibility.
+3. **Promote** (`helix/rag/promotion/`) — re-embed the corpus with the candidate into a fresh
+   `corpus.candidate.<job_id>` Qdrant collection, measure `retrieval_recall@10` on the dev split
+   before/after with bootstrap CIs, and atomically swap the `corpus.active` alias **only on a
+   positive lift** (otherwise archive). The `embedding_jobs` row records the full before/after
+   metrics and final status (`promoted` / `archived`).
+
+**Split discipline.** Mining draws from train-1000 (questions 600–1600); the canary measures on
+dev-100 (questions 0–100); the holdout-500 (questions 100–600) stays sequestered for
+`make eval-final`. The three are disjoint so the lift is measured on data the fine-tune never saw.
+
+The heavy backends (training fit, candidate indexing, canary retrieval) are all injectable, so
+the full loop is unit-tested end-to-end without a model or a Qdrant server.

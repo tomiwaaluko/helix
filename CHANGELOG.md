@@ -1,5 +1,16 @@
 ## Unreleased
 
+- Add the `finetune` CLI command + `make finetune` (Phase 4): orchestrates the full
+  mine → train → promote loop end-to-end against one `embedding_jobs` row.
+  `python -m helix.cli finetune --train <split> --eval <split> --corpus <path>` evaluates the
+  train split through the current pipeline (persisting results + spans), mines retrieval failures,
+  builds contrastive triplets, fine-tunes the embedder, then canary-evaluates the candidate on the
+  dev split and swaps `corpus.active` only on a positive recall@10 lift (otherwise archives).
+  Heavy backends are injected via new CLI factory seams (`_build_store`, `_train_backend`,
+  `_build_promotion_backends`) so the loop is unit-tested without a model or Qdrant server. Adds a
+  `FinetuneResult` summary (status, failures mined, triplets built, before/after metrics) and a
+  "Fine-tune loop (slice extension)" section to `docs/vertical-slice-plan.md`. 2 new CLI tests
+  (full loop + no-failures archive); 131 total tests, mypy --strict clean on 35 files. (Phase 4)
 - Add the promotion + canary-eval phase (Phase 3): `helix/rag/promotion/promote.py` —
   `promote_candidate()` re-indexes the full corpus with the candidate checkpoint into
   `corpus.candidate.<job_id>`, measures retrieval_recall@10 before (current `corpus.active`,

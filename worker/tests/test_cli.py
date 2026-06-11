@@ -228,3 +228,182 @@ def test_cli_run_single_question(monkeypatch: pytest.MonkeyPatch) -> None:
         )
         assert run_result.exit_code == 0, run_result.output
         assert "Apples are a fruit." in run_result.output
+
+
+# ---------------------------------------------------------------------------
+# finetune — full loop (mine → train → promote) with stubbed heavy backends
+# ---------------------------------------------------------------------------
+
+# A train example whose gold doc (d3, ancient Rome) is never retrieved: the fake
+# LLM always decomposes into apple sub-queries, so apple docs come back and d3 is
+# missed — exactly the recall<1.0 failure the miner is meant to catch.
+_TRAIN_DATASET = [
+    {
+        "id": "tr_001",
+        "input": {"question": "Tell me about apple varieties"},
+        "expected_output": {
+            "answer": "Rome was an empire.",
+            "supporting_facts": [{"doc_id": "d3", "sent": 0}],
+        },
+    },
+]
+
+
+def _patch_finetune_backends(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Stub the training fit and the promotion canary so no model/Qdrant is needed.
+
+    The candidate "wins" the canary (finds dev gold; baseline does not), so the
+    loop reaches the promoted terminal state. Returns a dict the test inspects.
+    """
+    captured: dict[str, Any] = {"trained": False, "indexed": []}
+
+    def _stub_train_fn(base_model: str, triplets: Any, output_dir: str, config: Any) -> None:
+        captured["trained"] = True
+        captured["n_triplets"] = len(triplets)
+        Path(output_dir, "model.sentinel").write_text("trained", encoding="utf-8")
+
+    monkeypatch.setattr(cli_mod, "_train_backend", lambda: _stub_train_fn)
+
+    def _build_backends(checkpoint_dir: str, adapter: Any, config: Any) -> tuple[Any, Any]:
+        async def _index(corpus_path: str, collection: str) -> None:
+            captured["indexed"].append((corpus_path, collection))
+            # Create the (empty) collection so the real alias swap on promotion resolves.
+            await adapter.create_collection(collection, vector_size=_DIM)
+
+        async def _retrieve(query: str, collection: str, k: int) -> list[str]:
+            # Baseline (corpus.active) misses dev gold; candidate collection finds d1.
+            return ["d_other"] if collection == "corpus.active" else ["d1"]
+
+        return _index, _retrieve
+
+    monkeypatch.setattr(cli_mod, "_build_promotion_backends", _build_backends)
+    return captured
+
+
+def test_cli_finetune_full_loop(monkeypatch: pytest.MonkeyPatch) -> None:
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("corpus.jsonl").write_text("\n".join(json.dumps(d) for d in _DOCS), encoding="utf-8")
+        Path("train.jsonl").write_text(
+            "\n".join(json.dumps(e) for e in _TRAIN_DATASET), encoding="utf-8"
+        )
+        Path("eval.jsonl").write_text("\n".join(json.dumps(e) for e in _DATASET), encoding="utf-8")
+        _patch_factories(monkeypatch)
+        captured = _patch_finetune_backends(monkeypatch)
+
+        index_result = runner.invoke(
+            cli,
+            [
+                "index",
+                "--corpus",
+                "corpus.jsonl",
+                "--collection",
+                "corpus.base",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--vector-size",
+                str(_DIM),
+                "--bm25",
+                "bm25.pkl",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert index_result.exit_code == 0, index_result.output
+
+        result = runner.invoke(
+            cli,
+            [
+                "finetune",
+                "--train",
+                "train.jsonl",
+                "--eval",
+                "eval.jsonl",
+                "--corpus",
+                "corpus.jsonl",
+                "--concurrency",
+                "1",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--bm25",
+                "bm25.pkl",
+                "--top-k",
+                "2",
+                "--epochs",
+                "1",
+                "--batch-size",
+                "2",
+                "--db",
+                "helix.db",
+                "--no-cache",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "promoted" in result.output
+        assert captured["trained"] is True
+        # At least one failure (the missed d3 gold) became a training triplet.
+        assert captured["n_triplets"] >= 1
+        assert "failures mined: 1" in result.output
+        # The candidate collection was indexed during promotion.
+        assert captured["indexed"], "promotion index_fn was not called"
+
+
+def test_cli_finetune_archives_when_no_failures(monkeypatch: pytest.MonkeyPatch) -> None:
+    """When every train example retrieves all its gold docs, there is nothing to mine."""
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        Path("corpus.jsonl").write_text("\n".join(json.dumps(d) for d in _DOCS), encoding="utf-8")
+        # Gold docs are the apple docs the fake pipeline reliably retrieves → recall 1.0.
+        Path("train.jsonl").write_text(json.dumps(_DATASET[1]), encoding="utf-8")
+        Path("eval.jsonl").write_text(json.dumps(_DATASET[1]), encoding="utf-8")
+        _patch_factories(monkeypatch)
+        captured = _patch_finetune_backends(monkeypatch)
+
+        index_result = runner.invoke(
+            cli,
+            [
+                "index",
+                "--corpus",
+                "corpus.jsonl",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--vector-size",
+                str(_DIM),
+                "--bm25",
+                "bm25.pkl",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert index_result.exit_code == 0, index_result.output
+
+        result = runner.invoke(
+            cli,
+            [
+                "finetune",
+                "--train",
+                "train.jsonl",
+                "--eval",
+                "eval.jsonl",
+                "--corpus",
+                "corpus.jsonl",
+                "--concurrency",
+                "1",
+                "--qdrant-path",
+                _QDRANT_PATH,
+                "--bm25",
+                "bm25.pkl",
+                "--top-k",
+                "2",
+                "--db",
+                "helix.db",
+                "--no-cache",
+                "--spans",
+                "spans.jsonl",
+            ],
+        )
+        assert result.exit_code == 0, result.output
+        assert "no_failures" in result.output
+        assert captured["trained"] is False

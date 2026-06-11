@@ -1,4 +1,4 @@
-.PHONY: seed eval eval-full eval-final test test-eval-smoke lint fmt dev dev-down
+.PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down
 
 # Boot Qdrant (the only external dependency for the slice)
 dev:
@@ -25,6 +25,15 @@ eval:
 	  --scorers answer_f1,citation_precision,retrieval_recall@10 \
 	  --concurrency 4 \
 	  --output evals/baselines/hotpotqa_dev_100_baseline.json
+
+# Fine-tune loop: mine retrieval failures on the train split, fine-tune the
+# embedder, and canary-promote on the dev set (swaps corpus.active only on lift).
+finetune:
+	python -m helix.cli finetune \
+	  --train evals/datasets/hotpotqa_train_1000.jsonl \
+	  --eval evals/datasets/hotpotqa_dev_100.jsonl \
+	  --corpus data/corpus.jsonl \
+	  --concurrency 4
 
 # Alias for CLAUDE.md compatibility
 test-eval-smoke: eval

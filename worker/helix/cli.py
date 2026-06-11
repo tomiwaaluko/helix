@@ -20,12 +20,14 @@ import asyncio
 import json
 import os
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 import click
 
+from helix.eval.corpus import load_corpus
 from helix.eval.harness import EvalReport, Example, Scorer, evaluate, load_dataset
 from helix.eval.scorers import (
     answer_f1,
@@ -36,7 +38,13 @@ from helix.eval.scorers import (
 from helix.logging import SpanLogger
 from helix.rag.chunker import Chunk, TokenCounter, chunk_document
 from helix.rag.indexer import IndexResult, index_corpus
+from helix.rag.miner.miner import mine_failures, to_store_row
+from helix.rag.promotion.promote import IndexFn, PromoteConfig, RetrieveFn, promote_candidate
 from helix.rag.retriever import HybridRetriever
+from helix.rag.trainer.train import TrainConfig, train_embedding
+from helix.rag.trainer.train import TrainFn as _TrainFn
+from helix.rag.trainer.triplets import build_triplets
+from helix.runtime.sqlite_store import SqliteStore
 from helix.tools.bm25 import BM25Index
 from helix.tools.embedder import Embedder
 from helix.tools.litellm_adapter import _DEFAULT_MODEL as ADAPTER_DEFAULT_MODEL
@@ -49,6 +57,8 @@ from helix.workflows.deep_research import ResearchDeps, deep_research, using_res
 DEFAULT_QDRANT_URL = "http://localhost:6333"
 DEFAULT_BM25_PATH = "data/bm25_index.pkl"
 DEFAULT_BASELINE = "evals/baselines/hotpotqa_dev_100_baseline.json"
+DEFAULT_DB_PATH = "data/helix.db"
+DEFAULT_MODELS_DIR = "data/models"
 SUPPORTED_WORKFLOWS = ("deep_research",)
 
 
@@ -86,6 +96,22 @@ def _build_completion_fns() -> tuple[
 def _token_counter() -> TokenCounter | None:
     """``None`` lets the chunker use its tiktoken counter; tests override it."""
     return None
+
+
+def _build_store(db_path: str) -> SqliteStore:
+    return SqliteStore(db_path)
+
+
+def _train_backend() -> _TrainFn | None:
+    """``None`` runs the real sentence-transformers fit; tests inject a stub."""
+    return None
+
+
+def _build_promotion_backends(
+    checkpoint_dir: str, adapter: QdrantAdapter, config: PromoteConfig
+) -> tuple[IndexFn | None, RetrieveFn | None]:
+    """Return (index_fn, retrieve_fn) for promotion; ``(None, None)`` uses the real defaults."""
+    return None, None
 
 
 # --- Shared helpers ----------------------------------------------------------
@@ -243,6 +269,125 @@ def retriever_embedder_name(retriever: HybridRetriever) -> str:
     return getattr(embedder, "model_name", "unknown")
 
 
+@dataclass
+class FinetuneResult:
+    """Outcome of the end-to-end fine-tune loop (mine → train → promote)."""
+
+    job_id: str
+    status: str  # "promoted" | "archived" | "no_failures" | "no_triplets"
+    failures_mined: int
+    triplets_built: int
+    output_dir: str | None
+    metrics: dict[str, Any] | None
+
+
+async def _finetune(
+    *,
+    train_dataset_path: str,
+    eval_dataset_path: str,
+    corpus_path: str,
+    scorers: Mapping[str, Scorer],
+    concurrency: int,
+    qdrant_url: str,
+    qdrant_path: str | None,
+    bm25_path: str,
+    top_k: int,
+    model: str | None,
+    base_model: str,
+    models_dir: str,
+    db_path: str,
+    spans_path: str,
+    train_config: TrainConfig,
+    promote_config: PromoteConfig,
+    span_logger: SpanLogger,
+) -> FinetuneResult:
+    """Run the full loop: mine failures on the train split, fine-tune, canary-promote.
+
+    The mining run evaluates ``train_dataset_path`` through the *current* retrieval
+    pipeline, persisting per-example results and emitting spans; failures (recall
+    < 1.0) become contrastive triplets that fine-tune ``base_model``. The candidate
+    is then canary-evaluated on ``eval_dataset_path`` and the ``corpus.active`` alias
+    is swapped only on a positive recall@10 lift. State transitions are recorded on
+    the ``embedding_jobs`` row throughout.
+    """
+    corpus = load_corpus(corpus_path)
+    store = _build_store(db_path)
+    async with store:
+        job = await store.create_embedding_job(base_model, train_config.to_dict())
+        job_id = job.id
+        output_dir = str(Path(models_dir) / job_id)
+
+        # --- Phase 1: mining run — eval the train split, persist results + spans ---
+        await store.update_embedding_job(job_id, status="mining")
+        train_dataset = load_dataset(train_dataset_path)
+        adapter, retriever = await _open_retriever(
+            qdrant_url=qdrant_url,
+            qdrant_path=qdrant_path,
+            bm25_path=bm25_path,
+            span_logger=span_logger,
+        )
+        async with adapter:
+            deps = _make_deps(retriever, top_k=top_k, model=model, span_logger=span_logger)
+            with using_research_deps(deps):
+                report = await evaluate(
+                    _run_workflow,
+                    train_dataset,
+                    scorers,
+                    concurrency=concurrency,
+                    store=store,
+                    eval_id=f"finetune-mining-{job_id}",
+                )
+            eval_results = await store.get_eval_results(report.eval_id)
+            cases = mine_failures(train_dataset, eval_results, corpus, spans_path=spans_path)
+            await store.save_failure_cases([to_store_row(case) for case in cases])
+            if not cases:
+                await store.update_embedding_job(job_id, status="archived")
+                return FinetuneResult(job_id, "no_failures", 0, 0, None, None)
+
+            # --- Phase 2: train — triplets → fine-tuned candidate checkpoint ---
+            await store.update_embedding_job(job_id, status="training")
+            triplets = build_triplets(
+                cases, corpus, negatives_per_query=train_config.negatives_per_query
+            )
+            if not triplets:
+                await store.update_embedding_job(job_id, status="archived")
+                return FinetuneResult(job_id, "no_triplets", len(cases), 0, None, None)
+            train_embedding(
+                triplets,
+                output_dir,
+                base_model=base_model,
+                config=train_config,
+                train_fn=_train_backend(),
+            )
+            await store.update_embedding_job(
+                job_id, status="training", triplets_count=len(triplets)
+            )
+
+            # --- Phase 3: promote — canary-eval on the dev split, swap on lift ---
+            eval_dataset = load_dataset(eval_dataset_path)
+            index_fn, retrieve_fn = _build_promotion_backends(output_dir, adapter, promote_config)
+            promote_result = await promote_candidate(
+                output_dir,
+                corpus_path,
+                eval_dataset,
+                job_id,
+                adapter=adapter,
+                store=store,
+                config=promote_config,
+                index_fn=index_fn,
+                retrieve_fn=retrieve_fn,
+            )
+
+        return FinetuneResult(
+            job_id=job_id,
+            status=promote_result.status,
+            failures_mined=len(cases),
+            triplets_built=len(triplets),
+            output_dir=output_dir,
+            metrics=promote_result.metrics,
+        )
+
+
 async def _run_one(
     *,
     question: str,
@@ -385,6 +530,93 @@ def eval(
     click.echo(f"Wrote {output} ({len(examples)} examples)")
     for name, agg in report.metrics.items():
         click.echo(f"  {name}: {agg['mean']:.4f} [{agg['ci_low']:.4f}, {agg['ci_high']:.4f}]")
+
+
+@cli.command()
+@click.option(
+    "--train", "train_dataset", required=True, help="Mining split (JSONL) to fine-tune on."
+)
+@click.option("--eval", "eval_dataset", required=True, help="Dev split (JSONL) for the canary.")
+@click.option("--corpus", required=True, help="JSONL corpus path (doc_id → text lookup).")
+@click.option(
+    "--scorers",
+    default="answer_f1,citation_precision,retrieval_recall@10",
+    show_default=True,
+)
+@click.option("--concurrency", default=4, show_default=True, type=int)
+@click.option("--qdrant-url", default=DEFAULT_QDRANT_URL, show_default=True)
+@click.option("--qdrant-path", default=None, help="Embedded on-disk Qdrant dir (no server/Docker).")
+@click.option("--bm25", "bm25_path", default=DEFAULT_BM25_PATH, show_default=True)
+@click.option("--top-k", default=10, show_default=True, type=int)
+@click.option("--model", default=None, help="Override the LLM (default LiteLLM model).")
+@click.option("--base-model", default="nomic-ai/nomic-embed-text-v1.5", show_default=True)
+@click.option("--models-dir", default=DEFAULT_MODELS_DIR, show_default=True)
+@click.option("--db", "db_path", default=DEFAULT_DB_PATH, show_default=True)
+@click.option("--epochs", default=3, show_default=True, type=int)
+@click.option("--batch-size", default=16, show_default=True, type=int)
+@click.option("--lr", default=2e-5, show_default=True, type=float)
+@click.option("--seed", default=0, show_default=True, type=int)
+@click.option("--no-cache", is_flag=True, help="Disable the LLM response cache.")
+@click.option("--spans", default=None, help="Span JSONL path (default data/spans.jsonl).")
+def finetune(
+    train_dataset: str,
+    eval_dataset: str,
+    corpus: str,
+    scorers: str,
+    concurrency: int,
+    qdrant_url: str,
+    qdrant_path: str | None,
+    bm25_path: str,
+    top_k: int,
+    model: str | None,
+    base_model: str,
+    models_dir: str,
+    db_path: str,
+    epochs: int,
+    batch_size: int,
+    lr: float,
+    seed: int,
+    no_cache: bool,
+    spans: str | None,
+) -> None:
+    """Mine retrieval failures on --train, fine-tune the embedder, canary-promote on --eval."""
+    if no_cache:
+        os.environ["HELIX_LLM_CACHE"] = "0"
+    scorer_map = _resolve_scorers(scorers)
+    train_config = TrainConfig(lr=lr, batch_size=batch_size, epochs=epochs, seed=seed)
+    promote_config = PromoteConfig(top_k=top_k, seed=seed)
+    logger = _span_logger(spans)
+    result = asyncio.run(
+        _finetune(
+            train_dataset_path=train_dataset,
+            eval_dataset_path=eval_dataset,
+            corpus_path=corpus,
+            scorers=scorer_map,
+            concurrency=concurrency,
+            qdrant_url=qdrant_url,
+            qdrant_path=qdrant_path,
+            bm25_path=bm25_path,
+            top_k=top_k,
+            model=model,
+            base_model=base_model,
+            models_dir=models_dir,
+            db_path=db_path,
+            spans_path=spans or "data/spans.jsonl",
+            train_config=train_config,
+            promote_config=promote_config,
+            span_logger=logger,
+        )
+    )
+    click.echo(f"Fine-tune job {result.job_id}: {result.status}")
+    click.echo(f"  failures mined: {result.failures_mined}")
+    click.echo(f"  triplets built: {result.triplets_built}")
+    if result.metrics is not None:
+        before = result.metrics["before"]["mean"]
+        after = result.metrics["after"]["mean"]
+        delta = result.metrics["delta_mean"]
+        click.echo(f"  recall@{top_k}: {before:.4f} → {after:.4f} (Δ {delta:+.4f})")
+    if result.output_dir is not None:
+        click.echo(f"  checkpoint: {result.output_dir}")
 
 
 @cli.command()
