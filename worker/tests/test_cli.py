@@ -17,12 +17,10 @@ import pytest
 pytest.importorskip("qdrant_client")
 
 from click.testing import CliRunner  # noqa: E402
-from qdrant_client import AsyncQdrantClient  # noqa: E402
 
 import helix.cli as cli_mod  # noqa: E402
 from helix.cli import cli  # noqa: E402
 from helix.tools.embedder import Embedder  # noqa: E402
-from helix.tools.qdrant_adapter import QdrantAdapter  # noqa: E402
 from helix.tools.reranker import Reranker  # noqa: E402
 
 _DIM = 8
@@ -80,18 +78,18 @@ class _FakeLLM:
         )
 
 
-def _patch_factories(monkeypatch: pytest.MonkeyPatch, qdrant_path: str) -> None:
+# Embedded on-disk Qdrant dir, shared across the index/eval invocations via
+# --qdrant-path (exercises the real _build_adapter local-mode branch).
+_QDRANT_PATH = "qdrant_local"
+
+
+def _patch_factories(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Only the model-backed components are stubbed; the Qdrant adapter is the real
+    # one, reached through --qdrant-path (embedded, no server).
     monkeypatch.setattr(
         cli_mod,
         "_build_embedder",
         lambda span_logger: Embedder(span_logger=span_logger, encode_fn=_encode),
-    )
-    monkeypatch.setattr(
-        cli_mod,
-        "_build_adapter",
-        lambda url, span_logger: QdrantAdapter(
-            client=AsyncQdrantClient(path=qdrant_path), span_logger=span_logger
-        ),
     )
     monkeypatch.setattr(cli_mod, "_build_reranker", lambda: Reranker(predict_fn=_overlap))
     monkeypatch.setattr(cli_mod, "_build_completion_fns", lambda: (_FakeLLM(), lambda _raw: 0.0))
@@ -105,7 +103,7 @@ def test_cli_index_then_eval(monkeypatch: pytest.MonkeyPatch) -> None:
         Path("dataset.jsonl").write_text(
             "\n".join(json.dumps(e) for e in _DATASET), encoding="utf-8"
         )
-        _patch_factories(monkeypatch, "qdrant_local")
+        _patch_factories(monkeypatch)
 
         index_result = runner.invoke(
             cli,
@@ -115,6 +113,8 @@ def test_cli_index_then_eval(monkeypatch: pytest.MonkeyPatch) -> None:
                 "corpus.jsonl",
                 "--collection",
                 "corpus.base",
+                "--qdrant-path",
+                _QDRANT_PATH,
                 "--vector-size",
                 str(_DIM),
                 "--bm25",
@@ -141,6 +141,8 @@ def test_cli_index_then_eval(monkeypatch: pytest.MonkeyPatch) -> None:
                 "2",
                 "--output",
                 "report.json",
+                "--qdrant-path",
+                _QDRANT_PATH,
                 "--bm25",
                 "bm25.pkl",
                 "--top-k",
@@ -187,7 +189,7 @@ def test_cli_run_single_question(monkeypatch: pytest.MonkeyPatch) -> None:
     runner = CliRunner()
     with runner.isolated_filesystem():
         Path("corpus.jsonl").write_text("\n".join(json.dumps(d) for d in _DOCS), encoding="utf-8")
-        _patch_factories(monkeypatch, "qdrant_local")
+        _patch_factories(monkeypatch)
 
         index_result = runner.invoke(
             cli,
@@ -195,6 +197,8 @@ def test_cli_run_single_question(monkeypatch: pytest.MonkeyPatch) -> None:
                 "index",
                 "--corpus",
                 "corpus.jsonl",
+                "--qdrant-path",
+                _QDRANT_PATH,
                 "--vector-size",
                 str(_DIM),
                 "--bm25",
@@ -211,6 +215,8 @@ def test_cli_run_single_question(monkeypatch: pytest.MonkeyPatch) -> None:
                 "run",
                 "--input",
                 json.dumps({"question": "Tell me about apples"}),
+                "--qdrant-path",
+                _QDRANT_PATH,
                 "--bm25",
                 "bm25.pkl",
                 "--top-k",

@@ -59,7 +59,16 @@ def _build_embedder(span_logger: SpanLogger) -> Embedder:
     return Embedder(span_logger=span_logger)
 
 
-def _build_adapter(url: str, span_logger: SpanLogger) -> QdrantAdapter:
+def _build_adapter(span_logger: SpanLogger, *, url: str, path: str | None) -> QdrantAdapter:
+    """Build a Qdrant adapter.
+
+    With ``path`` set, run Qdrant embedded in-process against an on-disk store
+    (no server, no Docker daemon); otherwise connect to the server at ``url``.
+    """
+    if path:
+        from qdrant_client import AsyncQdrantClient
+
+        return QdrantAdapter(client=AsyncQdrantClient(path=path), span_logger=span_logger)
     return QdrantAdapter(url=url, span_logger=span_logger)
 
 
@@ -149,6 +158,7 @@ async def _index(
     corpus: str,
     collection: str,
     qdrant_url: str,
+    qdrant_path: str | None,
     alias: str,
     bm25_path: str,
     vector_size: int,
@@ -158,7 +168,7 @@ async def _index(
 ) -> IndexResult:
     counter = _token_counter()
     embedder = _build_embedder(span_logger)
-    async with _build_adapter(qdrant_url, span_logger) as adapter:
+    async with _build_adapter(span_logger, url=qdrant_url, path=qdrant_path) as adapter:
         result = await index_corpus(
             corpus,
             collection,
@@ -179,11 +189,11 @@ async def _index(
 
 
 async def _open_retriever(
-    *, qdrant_url: str, bm25_path: str, span_logger: SpanLogger
+    *, qdrant_url: str, qdrant_path: str | None, bm25_path: str, span_logger: SpanLogger
 ) -> tuple[QdrantAdapter, HybridRetriever]:
     embedder = _build_embedder(span_logger)
     bm25 = BM25Index.load(bm25_path)
-    adapter = _build_adapter(qdrant_url, span_logger)
+    adapter = _build_adapter(span_logger, url=qdrant_url, path=qdrant_path)
     retriever = HybridRetriever(embedder, adapter, bm25, _build_reranker(), span_logger=span_logger)
     return adapter, retriever
 
@@ -209,6 +219,7 @@ async def _eval(
     scorers: Mapping[str, Scorer],
     concurrency: int,
     qdrant_url: str,
+    qdrant_path: str | None,
     bm25_path: str,
     top_k: int,
     model: str | None,
@@ -216,7 +227,7 @@ async def _eval(
 ) -> tuple[EvalReport, list[Example], str, str]:
     dataset = load_dataset(dataset_path)
     adapter, retriever = await _open_retriever(
-        qdrant_url=qdrant_url, bm25_path=bm25_path, span_logger=span_logger
+        qdrant_url=qdrant_url, qdrant_path=qdrant_path, bm25_path=bm25_path, span_logger=span_logger
     )
     deps = _make_deps(retriever, top_k=top_k, model=model, span_logger=span_logger)
     async with adapter:
@@ -236,13 +247,14 @@ async def _run_one(
     *,
     question: str,
     qdrant_url: str,
+    qdrant_path: str | None,
     bm25_path: str,
     top_k: int,
     model: str | None,
     span_logger: SpanLogger,
 ) -> Answer:
     adapter, retriever = await _open_retriever(
-        qdrant_url=qdrant_url, bm25_path=bm25_path, span_logger=span_logger
+        qdrant_url=qdrant_url, qdrant_path=qdrant_path, bm25_path=bm25_path, span_logger=span_logger
     )
     deps = _make_deps(retriever, top_k=top_k, model=model, span_logger=span_logger)
     async with adapter:
@@ -266,6 +278,7 @@ def cli() -> None:
 @click.option("--corpus", required=True, help="JSONL corpus path.")
 @click.option("--collection", default="corpus.base", show_default=True)
 @click.option("--qdrant-url", default=DEFAULT_QDRANT_URL, show_default=True)
+@click.option("--qdrant-path", default=None, help="Embedded on-disk Qdrant dir (no server/Docker).")
 @click.option("--alias", default="corpus.active", show_default=True)
 @click.option("--bm25", "bm25_path", default=DEFAULT_BM25_PATH, show_default=True)
 @click.option("--vector-size", default=768, show_default=True, type=int)
@@ -276,6 +289,7 @@ def index(
     corpus: str,
     collection: str,
     qdrant_url: str,
+    qdrant_path: str | None,
     alias: str,
     bm25_path: str,
     vector_size: int,
@@ -289,6 +303,7 @@ def index(
             corpus=corpus,
             collection=collection,
             qdrant_url=qdrant_url,
+            qdrant_path=qdrant_path,
             alias=alias,
             bm25_path=bm25_path,
             vector_size=vector_size,
@@ -314,6 +329,7 @@ def index(
 @click.option("--concurrency", default=4, show_default=True, type=int)
 @click.option("--output", default=DEFAULT_BASELINE, show_default=True)
 @click.option("--qdrant-url", default=DEFAULT_QDRANT_URL, show_default=True)
+@click.option("--qdrant-path", default=None, help="Embedded on-disk Qdrant dir (no server/Docker).")
 @click.option("--bm25", "bm25_path", default=DEFAULT_BM25_PATH, show_default=True)
 @click.option("--top-k", default=10, show_default=True, type=int)
 @click.option("--model", default=None, help="Override the LLM (default LiteLLM model).")
@@ -326,6 +342,7 @@ def eval(
     concurrency: int,
     output: str,
     qdrant_url: str,
+    qdrant_path: str | None,
     bm25_path: str,
     top_k: int,
     model: str | None,
@@ -343,6 +360,7 @@ def eval(
             scorers=scorer_map,
             concurrency=concurrency,
             qdrant_url=qdrant_url,
+            qdrant_path=qdrant_path,
             bm25_path=bm25_path,
             top_k=top_k,
             model=model,
@@ -373,6 +391,7 @@ def eval(
 @click.option("--workflow", default="deep_research", show_default=True)
 @click.option("--input", "input_json", required=True, help='JSON, e.g. {"question": "..."}.')
 @click.option("--qdrant-url", default=DEFAULT_QDRANT_URL, show_default=True)
+@click.option("--qdrant-path", default=None, help="Embedded on-disk Qdrant dir (no server/Docker).")
 @click.option("--bm25", "bm25_path", default=DEFAULT_BM25_PATH, show_default=True)
 @click.option("--top-k", default=10, show_default=True, type=int)
 @click.option("--model", default=None)
@@ -382,6 +401,7 @@ def run(
     workflow: str,
     input_json: str,
     qdrant_url: str,
+    qdrant_path: str | None,
     bm25_path: str,
     top_k: int,
     model: str | None,
@@ -400,6 +420,7 @@ def run(
         _run_one(
             question=question,
             qdrant_url=qdrant_url,
+            qdrant_path=qdrant_path,
             bm25_path=bm25_path,
             top_k=top_k,
             model=model,

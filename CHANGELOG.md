@@ -106,3 +106,7 @@
 - Fix corpus coverage in `scripts/prepare_corpus.py`: build from the first 600 questions (not 500)
   so the corpus covers the union of the dev (0–100) and holdout (100–600) splits. Under-covering
   silently failed holdout referential integrity (the holdout's supporting paragraphs were absent).
+- Add an embedded Qdrant mode to the CLI (`--qdrant-path` on `index`/`eval`/`run`): runs Qdrant
+  on-disk in-process via `AsyncQdrantClient(path=...)`, so the pipeline runs with no Qdrant server
+  or Docker daemon. Without it, `--qdrant-url` connects to a server as before. The CLI test now
+  exercises the real embedded branch instead of stubbing the adapter.
