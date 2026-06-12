@@ -49,7 +49,13 @@ class Reranker:
     def rerank(self, query: str, passages: list[str], top_k: int = 10) -> list[RankedPassage]:
         if not passages:
             return []
-        predict = self._predict or self._load()
+        # Cache the loaded model on the instance: ``CrossEncoder`` construction reloads
+        # ~0.5 GB of weights from disk, and ``rerank`` is called once per retrieval hop.
+        # Loading per call (the old ``self._predict or self._load()``) reloaded the model
+        # on every rerank and dominated mining/canary wall time. Mirrors ``Embedder._embed``.
+        if self._predict is None:
+            self._predict = self._load()
+        predict = self._predict
         scores = predict([(query, passage) for passage in passages])
         order = sorted(range(len(passages)), key=lambda i: scores[i], reverse=True)[:top_k]
         return [RankedPassage(index=i, passage=passages[i], score=float(scores[i])) for i in order]
