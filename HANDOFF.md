@@ -79,6 +79,71 @@ $ git status --short
 
 ---
 
+## Decision log
+
+> Architectural reasoning that should survive a session transition. Read this before touching
+> any of the components mentioned.
+
+### Hybrid canary — full pipeline, not dense-only (commit `de5e697`)
+
+The promotion gate runs both arms through the complete `HybridRetriever` (dense + BM25 + RRF +
+rerank), sharing a single BM25 index and reranker, differing only in embedder and target
+collection. An earlier design scored dense recall in isolation.
+
+**Why**: A candidate embedding model can produce a dense-recall gain that the reranker then washes
+out, making the promotion metric misleading. The end-to-end metric (recall after the full pipeline)
+is the only number that tells you whether the candidate actually helps the user. The dense-only
+number is noise for a promotion decision.
+
+**Implication**: `_build_promotion_backends` constructs two `HybridRetriever`s. Adding a new
+reranker model or BM25 variant means both arms automatically get it — no asymmetry risk.
+
+---
+
+### `tolerate_failures=True` scope — mining eval only (commit `633f24a`)
+
+`evaluate()` has a `tolerate_failures: bool = False` parameter. The `_finetune()` path passes
+`True`; the `eval` CLI command does not.
+
+**Why**: Mining partial results is better than mining nothing. A single Gemini 503 mid-run was
+aborting the entire finetune job. Skipped examples are counted in `EvalReport.examples_skipped`
+and surfaced in CLI output — the failure rate is visible, not silently swallowed.
+
+Baseline `eval` stays all-or-nothing because a partial eval report is worse than no report at all:
+it produces a recall number over an unknown subset of the dataset, which is not comparable to
+prior runs. The invariant is: `eval` either succeeds completely or fails clearly.
+
+**Implication**: If you add a new eval-like caller and want partial results, pass
+`tolerate_failures=True` explicitly. Don't catch exceptions around `evaluate()` — that defeats
+the `examples_skipped` accounting.
+
+---
+
+### `_normalize_nomic_checkpoint` — post-save, not load-path patching (commit `271cfd9`)
+
+After `model.save(output_dir)`, `_normalize_nomic_checkpoint(output_dir)` rewrites the
+`*.safetensors` shards in place, de-doubling `encoder.encoder.` → `encoder.`.
+
+**Why**: Nomic Embed v1.5's `save_pretrained` writes transformer weights under a doubled
+`encoder.encoder.layers.*` prefix; `load_state_dict` expects `encoder.layers.*`. Because
+`strict=False` is used on load, all 108 fine-tuned tensors are silently dropped — the candidate
+falls back to base-model weights. The bug is in the upstream library; we can't fix it there.
+
+Post-save normalization was chosen over load-path patching because:
+1. The checkpoint on disk is canonical — any tool (embedder, canary eval, manual inspection) gets
+   the correct weights without needing special load logic.
+2. Load-path patching would need to be applied in every consumer: the production embedder, the
+   canary retriever, and any future tooling. One post-save fixup beats N load-time patches.
+3. The helper is idempotent and self-limiting: if the upstream library ships a fix, already-
+   canonical checkpoints are left untouched and the helper becomes a no-op.
+
+**Implication**: Do not remove `_normalize_nomic_checkpoint` unless you have verified that the
+upstream `save_pretrained` no longer doubles the prefix (check for `_IncompatibleKeys` warnings
+with `encoder.encoder.*` during a test save→reload cycle). The two unit tests in
+`test_trainer.py` guard the fix.
+
+---
+
 ## 2026-06-11 23:00 UTC — Claude Code → next session
 
 **Last commit:** `633f24a` on `claude/eloquent-clarke-qiha1x`
