@@ -141,7 +141,12 @@ def _default_train_fn(
         optimizer_params={"lr": config.lr},
         show_progress_bar=False,
     )
-    model.save(output_dir)
+    # create_model_card=False: the default model-card generation runs a
+    # "Computing widget examples" inference pass that, layered on the training
+    # process's resident memory, drove peak RSS past the container limit and got
+    # the run OOM-killed mid-save. We never consume the card for an internal
+    # checkpoint, so skip it — save just writes weights + config.
+    model.save(output_dir, create_model_card=False)
     _normalize_nomic_checkpoint(output_dir)
 
 

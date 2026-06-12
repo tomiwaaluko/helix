@@ -101,6 +101,30 @@
 
 ## Pipeline / design traps
 
+### Training save OOM-killed by sentence-transformers model-card generation
+
+- **Date / session:** 2026-06-12, Claude Code
+- **Symptom:** A real `finetune` run died with no Python traceback right after the training
+  fit, at the log line `Computing widget examples`. `dmesg`: `Out of memory: Killed process
+  (python) anon-rss:15953472kB` — ~15.2 GB, the full container budget. The candidate
+  checkpoint dir was created but empty; the job row stayed stuck at `status=training`.
+- **Root cause:** `SentenceTransformer.save()` defaults to `create_model_card=True`, whose
+  "Computing widget examples" step runs an inference pass to populate the HF model card.
+  Layered on the training process's already-resident memory (base model + Adam state +
+  gradients + the still-held mining embedder/reranker + embedded Qdrant), that pass drove
+  peak RSS past 15 GB and the kernel OOM-killer reaped the process mid-save.
+- **Fix:** `model.save(output_dir, create_model_card=False)` in `_default_train_fn`
+  (`helix/rag/trainer/train.py`). We never consume the model card for an internal checkpoint,
+  so skipping it removes the inference pass; save just writes weights + config. Peak RSS for
+  the train+save phase drops to ~5–6 GB.
+- **Guard:** none direct (the stub train backend used in unit tests bypasses
+  `_default_train_fn`). Covered operationally: the run monitor now tracks process `VmRSS`.
+- **Watch for:** a run that dies with no traceback near `Computing widget examples`, or
+  `status` stuck at `training` with an empty checkpoint dir → check `dmesg` for an OOM kill
+  before assuming a code bug. Re-mining is avoidable: the mined `failure_cases` persist in
+  SQLite and the LLM cache is warm, so a re-run's mining phase is cache-dominated and fast.
+
+
 ### Mining eval was all-or-nothing under provider errors
 
 - **Date / session:** 2026-06-12, Claude Code
