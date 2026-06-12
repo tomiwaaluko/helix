@@ -27,6 +27,72 @@
 
 ---
 
+## 2026-06-12 23:44 UTC — Claude Code → next session
+
+**Last commit:** `90c3df8` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** clean
+
+```
+$ git log -1 --oneline
+90c3df8 fix(chunker): cache tiktoken counter after first call to avoid per-doc HTTP retries
+$ git status --short
+(clean)
+```
+
+**What shipped this session**
+
+- **Tiktoken O(N) bug fixed and committed** (`90c3df8`): `_TIKTOKEN_CACHED` module-level list in
+  `worker/helix/rag/chunker.py` caches the counter after first call. Before: 15 512 HTTP fetches
+  per seed run (each 403, ~40 ms, ~10 min total). After: one attempt, cached, all subsequent
+  calls are instant. mypy --strict required renaming the inner function to `_tiktoken_count`.
+- **corpus.base fully rebuilt** from the current 15 512-doc corpus: 15 568 chunks, 128 MB Qdrant
+  storage.sqlite (updated Jun 12 23:34 UTC), BM25 sidecar 30.25 MB (updated Jun 12 23:43 UTC).
+  PID 3894 completed: "Indexed 15512 docs / 15568 chunks into corpus.base (alias corpus.active);
+  BM25 -> data/bm25_index.pkl"
+- **Baseline eval launched** (PID 32259, nohup): running `helix.cli eval` over
+  `evals/datasets/hotpotqa_dev_100.jsonl` with `answer_f1,citation_precision,retrieval_recall@10`,
+  concurrency=4, writing to `evals/baselines/hotpotqa_dev_100_baseline.json`. Model weights loaded
+  as of 23:44 UTC; eval is in progress.
+
+**What's next**
+
+1. **Wait for eval PID 32259** to complete (2–7 h from start, per LLM cache miss rate).
+   Output: `evals/baselines/hotpotqa_dev_100_baseline.json`. Log: `data/run_logs/eval_full_baseline.log`.
+2. **Run finetune** with consistent corpus after baseline is confirmed:
+   ```
+   nohup /tmp/helixenv/bin/python -m helix.cli finetune \
+     --train evals/datasets/hotpotqa_train_150.jsonl \
+     --eval evals/datasets/hotpotqa_dev_100.jsonl \
+     --corpus data/corpus.jsonl \
+     --qdrant-path data/qdrant \
+     --concurrency 4 \
+     > data/run_logs/finetune_run2.log 2>&1 &
+   ```
+3. **Commit and push** HANDOFF, CHANGELOG, ISSUES updates after eval completes.
+4. Interpret the delta from the clean before/after comparison.
+
+**Open questions / decisions pending**
+
+- Same as last session: if delta is still negative after consistent corpus, consider more triplets,
+  different lr/epochs, or checking whether dev questions are too easy for retrieval to matter.
+- The baseline number from `hotpotqa_dev_100_baseline.json` may differ from the previous 0.69 due
+  to the larger corpus (more distractors). Worth noting the before/after values carefully.
+
+**Gotchas hit**
+
+- **PID 3894 started before tiktoken fix was committed** but the fix WAS on disk at startup time
+  (Python imports `.py` files, not git blobs). The log shows only 2 tiktoken warnings (one per
+  chunking pass) confirming the fix was active. The commit timestamp (22:43) is after the process
+  start (22:06) but the file write preceded both.
+- **BM25Okapi init is CPU-heavy**: for 15 568 chunks, `BM25Okapi(tokenized_docs)` ran for ~9 min
+  at 271% CPU after the Qdrant upsert finished at 23:34. The BM25 pkl write completed at 23:43.
+  Don't assume the process hangs if it's still running after the upsert — check `/proc/<pid>/fd`
+  for the open bm25_index.pkl fd to confirm the save phase has started.
+- **Save writes directly (no temp file)**: `BM25Index.save()` does `destination.open("wb")` then
+  `pickle.dump()`. No `.tmp` sidecar. The file timestamp only updates when the fd is closed.
+
+---
+
 ## 2026-06-12 08:55 UTC — Claude Code → next session
 
 **Last commit:** `eae726a` on `claude/eloquent-clarke-qiha1x`
