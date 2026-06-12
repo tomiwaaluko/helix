@@ -1,5 +1,12 @@
 ## Unreleased
 
+- **Fix: cache `_tiktoken_counter()` result after first call** (`helix/rag/chunker.py`). With
+  `token_counter=None` (the CLI default), every `chunk_document` call previously retried the
+  tiktoken `cl100k_base` blob download, adding ~10 min of failing HTTP round-trips before
+  embedding started on a 15 K-doc corpus. A module-level sentinel list now stores the resolved
+  counter (tiktoken or heuristic fallback) after the first call; subsequent calls are O(1).
+  139 tests, mypy --strict clean, no change to chunk counts.
+
 - **First real end-to-end fine-tune measurement on the full corpus.**
   Ran `make finetune` (via `helix.cli finetune`) on `hotpotqa_train_150.jsonl` against the
   full 15 512-doc corpus and `hotpotqa_dev_100.jsonl`. Results:

@@ -48,11 +48,22 @@ def _heuristic_counter() -> TokenCounter:
     return count
 
 
+_TIKTOKEN_CACHED: list[TokenCounter] = []  # [counter] once resolved, [] until first call
+
+
 def _tiktoken_counter() -> TokenCounter:
+    if _TIKTOKEN_CACHED:
+        return _TIKTOKEN_CACHED[0]
+    counter: TokenCounter
     try:
         import tiktoken
 
         encoding = tiktoken.get_encoding("cl100k_base")
+
+        def _tiktoken_count(text: str) -> int:
+            return len(encoding.encode(text))
+
+        counter = _tiktoken_count
     except Exception as exc:  # noqa: BLE001 - any download/import failure → heuristic
         import warnings
 
@@ -62,12 +73,9 @@ def _tiktoken_counter() -> TokenCounter:
             RuntimeWarning,
             stacklevel=2,
         )
-        return _heuristic_counter()
-
-    def count(text: str) -> int:
-        return len(encoding.encode(text))
-
-    return count
+        counter = _heuristic_counter()
+    _TIKTOKEN_CACHED.append(counter)
+    return counter
 
 
 def _split_words(text: str, max_tokens: int, count: TokenCounter) -> list[str]:

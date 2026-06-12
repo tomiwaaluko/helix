@@ -198,6 +198,25 @@
   multi-hour wall time. Do not mistake slow-but-progressing mining for a hang — check that
   `eval_results` rows for `finetune-mining-<job_id>` are still climbing.
 
+### Chunker retries tiktoken download on every `chunk_document` call — O(N) network round-trips
+
+- **Date / session:** 2026-06-12, Claude Code
+- **Symptom:** Full-corpus `index` or `finetune` chunking took ~10 min for 15 512 docs. The
+  `_tiktoken_counter()` function attempted an HTTP GET to the OpenAI blob store on every call.
+  With 15 512 calls × ~40 ms per failing HTTP round-trip, this added ~10 min of pure network
+  latency before embedding even began (previously hidden by the longer embedding time).
+- **Root cause:** `chunk_document` takes an optional `token_counter` argument. The CLI passes
+  `token_counter=None` (the `_token_counter()` seam returns `None`), so each call resolves to
+  `_tiktoken_counter()`. That function did not cache its result — each invocation re-imported
+  `tiktoken`, re-attempted the `cl100k_base` blob download, and re-fell-back to heuristic.
+- **Fix:** Added a module-level `_TIKTOKEN_CACHED` list to `helix/rag/chunker.py`. The first
+  call resolves the counter (tiktoken or heuristic) and appends it; subsequent calls return the
+  cached value immediately.  Idempotent, thread-safe in the single-threaded indexer path.
+- **Guard:** 139 tests, mypy --strict clean. The cached counter is the same callable that was
+  returned before (heuristic in this env), so chunk counts are unchanged.
+- **Watch for:** chunking phase taking longer than a few seconds for a 15 K-doc corpus — if
+  `_TIKTOKEN_CACHED` is somehow cleared between calls, the per-doc retry will reappear.
+
 ### Corpus base index stale after corpus update — promotion comparison confounded
 
 - **Date / session:** 2026-06-12, Claude Code
