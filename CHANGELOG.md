@@ -1,5 +1,20 @@
 ## Unreleased
 
+- **First real end-to-end fine-tune measurement on the full corpus.**
+  Ran `make finetune` (via `helix.cli finetune`) on `hotpotqa_train_150.jsonl` against the
+  full 15 512-doc corpus and `hotpotqa_dev_100.jsonl`. Results:
+  - Mining: 142/150 questions failed direct retrieval (recall@10 = 0.027 on train); 291 failure
+    cases → 291 contrastive triplets.
+  - Training: 3 epochs, batch_size=4, loss=0.336; checkpoint saved to
+    `data/models/ae7289f02f69439080e17fd85babe9ae/`.
+  - Canary eval: before recall@10 = 0.960 [CI 0.930–0.985] (base hybrid retriever, old
+    5 937-point corpus); after recall@10 = 0.935 [CI 0.900–0.965] (fine-tuned hybrid retriever,
+    new 15 568-point corpus); delta = −0.025.
+  - Decision: **archived** (negative delta).
+  - Important caveat: before and after arms searched indices of different sizes (5 937 vs
+    15 568 chunks), confounding the delta. Next step: rebuild `corpus.base` with the full
+    corpus before the next finetune run (see ISSUES.md "Corpus base index stale").
+
 - **Fix the fine-tuned checkpoint save/reload round-trip.** The Nomic Embed v1.5 remote
   modeling code's `save_pretrained` writes transformer weights under a doubled
   `encoder.encoder.layers.*` prefix while reload expects `encoder.layers.*`, so a reloaded

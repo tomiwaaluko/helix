@@ -198,6 +198,56 @@
   multi-hour wall time. Do not mistake slow-but-progressing mining for a hang — check that
   `eval_results` rows for `finetune-mining-<job_id>` are still climbing.
 
+### Corpus base index stale after corpus update — promotion comparison confounded
+
+- **Date / session:** 2026-06-12, Claude Code
+- **Symptom:** The first real finetune run produced a confounded before/after recall comparison:
+  `before=0.960` searched the old 5 937-chunk `corpus.base`, while `after=0.935` searched a fresh
+  15 568-chunk candidate index built from the current `corpus.jsonl` (15 512 docs). Different index
+  sizes make the delta uninterpretable — a smaller index has higher gold-doc density, so it already
+  has a recall advantage before embedding quality enters.
+- **Root cause:** `corpus.jsonl` was regenerated at Jun 11 18:43 (expanding to 15 512 docs), but
+  `corpus.base` was indexed at Jun 11 15:04 from an older, smaller version (~5 937 chunks). `make
+  seed` was never re-run after the corpus update. The promotion code builds the candidate index from
+  the current `corpus.jsonl` (correct) but compares it against whatever `corpus.active` currently
+  points to (stale), so the sizes diverge silently.
+- **Fix / next step:** Re-run `make seed` after any corpus update to rebuild `corpus.base` (and
+  BM25 sidecar) from the current `corpus.jsonl`. Then re-measure the baseline (`make eval`) to get
+  a consistent `hotpotqa_dev_100_baseline.json`. Only after that is a `make finetune` run
+  interpretable: both arms will search indices built from the same corpus.
+- **Guard:** none today. A future improvement: the promotion could assert that
+  `|candidate_chunks - base_chunks| / base_chunks < 0.05` and warn loudly if they diverge.
+- **Watch for:** any finetune run where the candidate collection ends up substantially larger or
+  smaller than `corpus.base` — check `du -sh data/qdrant/collection/corpus.base/` vs
+  `data/qdrant/collection/corpus.candidate.*/` before interpreting a delta.
+
+### Promotion recall@10 is not the same metric as baseline eval recall@10
+
+- **Date / session:** 2026-06-12, Claude Code
+- **Symptom:** The promotion's "before" recall@10 (0.960) is far higher than the baseline eval
+  recall@10 (0.690) measured by `make eval` — 27 pp higher on the same corpus and same 100
+  questions.
+- **Root cause:** They measure different things:
+  1. **Baseline eval** (`make eval`): runs the full `deep_research` workflow (LLM sub-question
+     decomposition, multiple retrieval rounds), collects the union of doc IDs retrieved across all
+     sub-queries, and scores recall on the first 10 of that union.  The bottleneck is how the LLM
+     decomposes questions into effective sub-queries, not retrieval quality per se.
+  2. **Promotion recall** (`promote_candidate`): issues a single `HybridRetriever.retrieve(raw
+     question, top_k=10)` call per example and scores recall on those 10 results directly.  This
+     isolates retrieval quality on the verbatim question, bypassing the workflow.
+  Result: the retriever itself is strong (0.96 recall on raw questions) but the workflow's use of
+  sub-questions limits end-to-end recall to 0.69.  A fine-tune that improves retriever quality may
+  not move the end-to-end number if the workflow decomposition is the bottleneck.
+- **Fix / implication:** Both metrics are valid but measure different things. The promotion gate
+  (direct retrieval recall) is a cleaner signal for "did the embedding improve?" The baseline
+  eval (workflow recall) is the user-facing headline number. A positive promotion delta does not
+  guarantee a positive baseline delta, and vice versa.  For the research thesis, what matters is:
+  does a positive promotion delta reliably predict a positive baseline eval delta? That question
+  requires paired measurements (run `make eval` before and after a promotion).
+- **Guard:** none today.
+- **Watch for:** a promoted candidate that does not lift `make eval` recall — could mean the
+  retriever improved but the workflow is the bottleneck.
+
 ### Holdout dataset access is guarded — don't read it directly
 
 - **Date / session:** standing constraint

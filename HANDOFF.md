@@ -27,6 +27,77 @@
 
 ---
 
+## 2026-06-12 08:55 UTC — Claude Code → next session
+
+**Last commit:** `eae726a` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** dirty: CHANGELOG.md, ISSUES.md, HANDOFF.md (this commit)
+
+```
+$ git log -1 --oneline
+eae726a fix(trainer): lower finetune batch_size default to avoid training OOM
+$ git status --short
+ M CHANGELOG.md
+ M HANDOFF.md
+ M ISSUES.md
+```
+
+**What shipped / was learned this session**
+
+First real end-to-end fine-tune measurement on the full corpus (job `ae7289f02f694390…`):
+
+- **Mine**: 150-question train split, 142/150 failed (recall@10 = 0.027 on train). 291 failure
+  cases → 291 contrastive triplets. Mining took ~1 h with warm LLM cache.
+- **Train**: 3 epochs, batch_size=4, loss=0.336 (train_runtime ~1671 s). Checkpoint saved to
+  `data/models/ae7289f02f69439080e17fd85babe9ae/` (9 safetensors files). `_normalize_nomic_checkpoint`
+  de-doubled the encoder prefix as expected.
+- **Index candidate**: 15 568 chunks from full corpus.jsonl (15 512 docs) → upserted into
+  `corpus.candidate.ae7289f02f69439080e17fd85babe9ae` (129 MB, ~90 s). Embedding took ~52 min on
+  CPU (the entire candidate embedding is computed in memory before the upsert fires, so the
+  collection stays empty until all vectors are ready — not a hang).
+- **Canary eval**: before=0.960 [0.930–0.985], after=0.935 [0.900–0.965], delta=−0.025.
+  Status: **archived**.
+- **Two new issues logged** (see ISSUES.md):
+  1. **Corpus base index stale** — `corpus.base` was built from an older ~5 937-chunk corpus;
+     the candidate collection was built from the current 15 512-doc corpus. The before/after
+     comparison is confounded by different corpus sizes. Must re-run `make seed` before the next
+     finetune.
+  2. **Promotion recall ≠ baseline eval recall** — promotion measures direct retrieval recall
+     (0.96 before) while baseline eval measures end-to-end workflow recall (0.69). The retriever
+     is not the bottleneck on the dev set; the LLM sub-question decomposition is.
+
+**What's next**
+
+1. **Rebuild corpus.base** with the current full corpus: `make seed` (this will re-index all
+   15 512 docs into `corpus.base` and rebuild the BM25 sidecar).
+2. **Re-measure baseline**: `make eval` to get a fresh `hotpotqa_dev_100_baseline.json` from the
+   full corpus (expect recall@10 to drop somewhat — more distractors, same gold doc density).
+3. **Re-run finetune** with a consistent corpus: `make finetune --train evals/datasets/hotpotqa_train_150.jsonl` — now before/after arms will search same-size indices, making the delta interpretable.
+4. If the delta is still negative, consider: more triplets (larger train split), different lr/epochs,
+   or investigating whether the dev questions are simply too easy for direct retrieval to improve.
+
+**Open questions / decisions pending**
+
+- The train/dev recall gap (train=0.027, dev promotion=0.96) suggests the dev questions are much
+  easier for retrieval than the train questions. Is `hotpotqa_dev_100` a useful promotion target?
+  Or should the promotion canary be evaluated on a held-out subset of the train distribution?
+- After re-seeding and re-baselining, should the session also re-run `make eval` to confirm the
+  0.69 number holds on the full corpus?
+
+**Gotchas hit**
+
+- **Candidate collection empty until upsert fires**: `_make_default_index_fn` embeds ALL corpus
+  chunks in memory first, then calls `upsert_to` in one shot. The collection stays at 0 points for
+  the entire embedding phase (~52 min) and then fills in ~90 s. Not a hang — watch RSS growth
+  instead of point count to gauge progress.
+- **RSS drop signals embedding-to-upsert transition**: when the embedder frees its tokenized
+  inputs + activations after `embed_documents()` returns, RSS drops noticeably (~100 MB). That dip
+  is the signal to start watching the Qdrant file size for the upsert.
+- **Process was alive throughout** — the previous session's summary suspected a container restart
+  killed the finetune process, but PID 14946 survived the session gap (protected by `nohup`).
+  Check `ps aux` before assuming a process died.
+
+---
+
 ## 2026-06-12 01:00 UTC — Claude Code → next session
 
 **Last commit:** `ca97f06` on `claude/eloquent-clarke-qiha1x` (checkpoint-fix commit follows)
