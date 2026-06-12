@@ -11,6 +11,7 @@ dependencies = [
   "litellm>=1.40",
   "qdrant-client>=1.12",
   "sentence-transformers>=3.0",
+  "accelerate>=1.1.0",  # transformers.Trainer backend used by sentence-transformers .fit()
   "einops>=0.7",  # required by the Nomic Embed v1.5 remote modeling code
   "aiosqlite>=0.20",
   "rank-bm25>=0.2",

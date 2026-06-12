@@ -1,5 +1,11 @@
 ## Unreleased
 
+- Declare `accelerate>=1.1.0` in `worker/pyproject.toml`. `sentence-transformers` `.fit()`
+  delegates to `transformers.Trainer`, which hard-requires `accelerate` even for single-device
+  CPU training; without it the real fine-tune raised `ImportError` at the `train_embedding` step.
+  Surfaced by the first real end-to-end `finetune` run (the mining-eval resilience fix let the
+  job advance past mining into training, where the missing dep was hit). `docs/tech-stack.md`
+  updated to note the pin.
 - **Mining-eval resilience** (`633f24a`): `evaluate()` gains a `tolerate_failures=True` parameter
   that skips per-example failures (after all retries) instead of aborting the run. Skipped count
   is recorded in `EvalReport.examples_skipped`, propagated into `FinetuneResult.failures_skipped`,

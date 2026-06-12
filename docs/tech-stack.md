@@ -122,9 +122,9 @@ Every choice below is justified against the alternatives we considered. Where th
 
 ### sentence-transformers for fine-tuning
 
-**Pick:** `sentence-transformers` + PyTorch for the fine-tuning loop.
+**Pick:** `sentence-transformers` + PyTorch for the fine-tuning loop, with `accelerate` as the training backend.
 
-**Why:** Mature library, sensible defaults, native InfoNCE loss support, integrates with HuggingFace model hub for sharing fine-tuned checkpoints.
+**Why:** Mature library, sensible defaults, native InfoNCE loss support, integrates with HuggingFace model hub for sharing fine-tuned checkpoints. `sentence-transformers` `.fit()` delegates to `transformers.Trainer`, which requires `accelerate>=1.1.0` even for single-device CPU training; it is pinned explicitly in `worker/pyproject.toml` so the trainer is not a runtime-only surprise.
 
 ### tiktoken for chunk sizing
 
