@@ -1,5 +1,15 @@
 ## Unreleased
 
+- **Fix the fine-tuned checkpoint save/reload round-trip.** The Nomic Embed v1.5 remote
+  modeling code's `save_pretrained` writes transformer weights under a doubled
+  `encoder.encoder.layers.*` prefix while reload expects `encoder.layers.*`, so a reloaded
+  checkpoint silently dropped all 108 fine-tuned transformer tensors and fell back to base
+  weights — making every promotion canary evaluate a no-op "candidate" (reproduced even on an
+  untrained base model: save→reload perturbed embeddings by max-abs 3.29). `_default_train_fn`
+  now calls `_normalize_nomic_checkpoint()` after `model.save()` to de-double the prefix in the
+  saved `*.safetensors`; the fix is idempotent and self-limiting (a future fixed library leaves
+  canonical checkpoints untouched). After the fix, save→reload embeddings match the in-memory
+  model exactly (max-abs 0.0). 2 new trainer tests. Surfaced by the first real end-to-end run.
 - Declare `accelerate>=1.1.0` in `worker/pyproject.toml`. `sentence-transformers` `.fit()`
   delegates to `transformers.Trainer`, which hard-requires `accelerate` even for single-device
   CPU training; without it the real fine-tune raised `ImportError` at the `train_embedding` step.

@@ -27,6 +27,58 @@
 
 ---
 
+## 2026-06-12 01:00 UTC — Claude Code → next session
+
+**Last commit:** `ca97f06` on `claude/eloquent-clarke-qiha1x` (checkpoint-fix commit follows)
+**Working tree:** dirty: train.py, test_trainer.py, CHANGELOG.md, HANDOFF.md (this commit)
+**Task plan position:** Fine-tune loop validated on real infra; two real bugs found + fixed.
+
+```
+$ git log -1 --oneline
+ca97f06 deps: declare accelerate>=1.1.0 for the real fine-tune training path
+$ git status --short
+ M CHANGELOG.md
+ M HANDOFF.md
+ M worker/helix/rag/trainer/train.py
+ M worker/tests/test_trainer.py
+```
+
+**What shipped / was learned this session**
+- Ran the **first real end-to-end `finetune`** (smoke corpus, real Nomic, real Gemini). It
+  exercised the whole loop and surfaced three things, in order:
+  1. **Mining resilience holds** — the run survived a live LiteLLM error mid-mining, evaluated
+     all 12 train questions, mined 1 genuine failure (`train_007`, recall 0.5), advanced to train.
+  2. **Missing `accelerate` dep** (`ca97f06`) — real training raised `ImportError` until pinned.
+  3. **Checkpoint save/reload bug** (this commit) — Nomic's `save_pretrained` doubles the
+     `encoder.encoder.layers.*` prefix; reload drops all 108 fine-tuned tensors → silent no-op
+     candidate. Reproduced on an untrained base model (save→reload diff max-abs 3.29). Fixed via
+     `_normalize_nomic_checkpoint()` in `train.py` (de-doubles saved safetensors; idempotent).
+     Post-fix save→reload embeddings match in-memory exactly (max-abs 0.0). 2 new trainer tests.
+- The second full run completed green: `mine → train → promote`, status **archived**,
+  recall@3 1.0→1.0. The flat delta is expected — the 7-question smoke dev set saturates recall
+  at top-k=3, so there is no headroom to measure a lift (separate from the no-op bug, which the
+  unit-level embedding-equivalence proof addresses directly).
+- 138 tests, ruff + mypy --strict clean.
+
+**What's next**
+1. **Real validation run with headroom**: seed the full 15512-doc corpus (`make seed`) and run
+   `make finetune` against `hotpotqa_dev_100` with a top-k that leaves recall headroom (e.g. the
+   default 10, or lower if the full corpus still saturates). Only there can a genuine lift show.
+2. The two canary limitations from the prior entry still stand (single-query proxy; chained
+   promotions re-index on current `corpus.active`).
+
+**Open questions / decisions pending**
+- None blocking. The loop is now correct end-to-end; remaining work is a real measurement run.
+
+**Gotchas hit**
+- `sqlite3` CLI is **not installed** in this env — inspect the DB via Python `sqlite3` module,
+  not the shell tool (silent empty results otherwise).
+- Nomic checkpoint round-trip is broken upstream; do not remove `_normalize_nomic_checkpoint`
+  unless a future sentence-transformers/Nomic release fixes `save_pretrained` (the helper no-ops
+  on already-canonical checkpoints, so it is safe to leave in regardless).
+
+---
+
 ## 2026-06-11 23:00 UTC — Claude Code → next session
 
 **Last commit:** `633f24a` on `claude/eloquent-clarke-qiha1x`

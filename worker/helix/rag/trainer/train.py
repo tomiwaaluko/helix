@@ -74,6 +74,45 @@ def _seed_everything(seed: int) -> None:
         pass
 
 
+# The Nomic Embed v1.5 remote modeling code round-trips its transformer weights
+# under a doubled key prefix: ``save_pretrained`` writes ``encoder.encoder.layers.*``
+# but the model structure expects ``encoder.layers.*``, so a reload silently drops
+# every fine-tuned transformer-layer tensor (only the 4 embedding/layernorm keys
+# bind) and falls back to base weights. The candidate then *looks* trained but
+# embeds like the base model — a silent no-op that poisons every canary. We strip
+# the erroneous doubling from the saved checkpoint so it round-trips.
+_DOUBLED_PREFIX = "encoder.encoder."
+_CANONICAL_PREFIX = "encoder."
+
+
+def _normalize_nomic_checkpoint(output_dir: str) -> int:
+    """Rewrite saved ``*.safetensors`` to de-double the ``encoder.encoder.`` prefix.
+
+    Idempotent and self-limiting: it only touches keys that carry the doubled
+    prefix, so a checkpoint saved by a future (fixed) library version is left
+    untouched. Returns the number of keys rewritten across all shards.
+    """
+    from safetensors import safe_open
+    from safetensors.torch import save_file
+
+    rewritten = 0
+    for shard in Path(output_dir).glob("*.safetensors"):
+        with safe_open(shard, framework="pt") as handle:
+            metadata = handle.metadata() or {"format": "pt"}
+            tensors = {key: handle.get_tensor(key) for key in handle.keys()}
+        if not any(key.startswith(_DOUBLED_PREFIX) for key in tensors):
+            continue
+        fixed = {
+            (_CANONICAL_PREFIX + key[len(_DOUBLED_PREFIX) :])
+            if key.startswith(_DOUBLED_PREFIX)
+            else key: value
+            for key, value in tensors.items()
+        }
+        rewritten += sum(1 for key in tensors if key.startswith(_DOUBLED_PREFIX))
+        save_file(fixed, shard, metadata=metadata)
+    return rewritten
+
+
 def _default_train_fn(
     base_model: str, triplets: list[Triplet], output_dir: str, config: TrainConfig
 ) -> None:
@@ -103,6 +142,7 @@ def _default_train_fn(
         show_progress_bar=False,
     )
     model.save(output_dir)
+    _normalize_nomic_checkpoint(output_dir)
 
 
 def train_embedding(

@@ -141,6 +141,60 @@ def test_train_config_to_dict_round_trips() -> None:
 
 
 # ---------------------------------------------------------------------------
+# _normalize_nomic_checkpoint — fixes the doubled-prefix save/reload bug
+# ---------------------------------------------------------------------------
+
+
+def _write_safetensors(path: Path, keys: list[str]) -> None:
+    torch = pytest.importorskip("torch")
+    from safetensors.torch import save_file
+
+    save_file({k: torch.zeros(2) for k in keys}, path, metadata={"format": "pt"})
+
+
+def test_normalize_nomic_checkpoint_dedoubles_prefix(tmp_path: Path) -> None:
+    pytest.importorskip("safetensors")
+    from safetensors import safe_open
+
+    from helix.rag.trainer.train import _normalize_nomic_checkpoint
+
+    shard = tmp_path / "model.safetensors"
+    _write_safetensors(
+        shard,
+        [
+            "embeddings.word_embeddings.weight",  # untouched
+            "emb_ln.weight",  # untouched
+            "encoder.encoder.layers.0.attn.Wqkv.weight",  # de-doubled
+            "encoder.encoder.layers.1.mlp.fc2.weight",  # de-doubled
+        ],
+    )
+
+    rewritten = _normalize_nomic_checkpoint(str(tmp_path))
+
+    assert rewritten == 2
+    with safe_open(shard, framework="pt") as handle:
+        keys = set(handle.keys())
+    assert keys == {
+        "embeddings.word_embeddings.weight",
+        "emb_ln.weight",
+        "encoder.layers.0.attn.Wqkv.weight",
+        "encoder.layers.1.mlp.fc2.weight",
+    }
+
+
+def test_normalize_nomic_checkpoint_is_noop_when_already_canonical(tmp_path: Path) -> None:
+    pytest.importorskip("safetensors")
+    from helix.rag.trainer.train import _normalize_nomic_checkpoint
+
+    _write_safetensors(
+        tmp_path / "model.safetensors",
+        ["encoder.layers.0.attn.Wqkv.weight", "emb_ln.bias"],
+    )
+    # Already-correct checkpoints (or a future fixed library) are left untouched.
+    assert _normalize_nomic_checkpoint(str(tmp_path)) == 0
+
+
+# ---------------------------------------------------------------------------
 # embedding_jobs persistence
 # ---------------------------------------------------------------------------
 
