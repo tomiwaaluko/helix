@@ -27,6 +27,11 @@ from helix.rag.trainer.triplets import Triplet
 
 DEFAULT_BASE_MODEL = "nomic-ai/nomic-embed-text-v1.5"
 
+# Corpus passages are indexed at <=512 tokens (the chunker's max_tokens), so
+# training never needs the model's 8192-token default. Capping here bounds the
+# per-step activation memory of MultipleNegativesRankingLoss on the CPU box.
+_MAX_TRAIN_SEQ_LEN = 512
+
 
 @dataclass(frozen=True)
 class TrainConfig:
@@ -124,6 +129,13 @@ def _default_train_fn(
     _seed_everything(config.seed)
 
     model = SentenceTransformer(base_model, trust_remote_code=True)
+    # Nomic defaults max_seq_length to 8192. MultipleNegativesRankingLoss retains
+    # backprop activations for every text in the batch (anchor + positive + N
+    # negatives), so peak memory scales with batch_size * texts * seq_len * layers.
+    # Cap the sequence length to the corpus chunk size (passages are indexed at
+    # <=512 tokens) so a stray long passage cannot balloon training memory; this is
+    # a no-op for in-distribution passages but bounds the worst case on the CPU box.
+    model.max_seq_length = min(model.max_seq_length, _MAX_TRAIN_SEQ_LEN)
     examples = [InputExample(texts=t.to_texts()) for t in triplets]
     # A list of InputExample is the canonical sentence-transformers map-style
     # dataset (supports __getitem__/__len__); torch's stub only accepts Dataset.
@@ -141,11 +153,10 @@ def _default_train_fn(
         optimizer_params={"lr": config.lr},
         show_progress_bar=False,
     )
-    # create_model_card=False: the default model-card generation runs a
-    # "Computing widget examples" inference pass that, layered on the training
-    # process's resident memory, drove peak RSS past the container limit and got
-    # the run OOM-killed mid-save. We never consume the card for an internal
-    # checkpoint, so skip it — save just writes weights + config.
+    # create_model_card=False: we never consume the HF model card for an internal
+    # checkpoint, so skip its "Computing widget examples" inference pass. (The peak
+    # memory that OOM-killed early runs was the fit itself — see _train_batch_size /
+    # max_seq_length below — not the card; skipping it just trims unused save work.)
     model.save(output_dir, create_model_card=False)
     _normalize_nomic_checkpoint(output_dir)
 

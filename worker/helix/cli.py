@@ -619,7 +619,11 @@ def eval(
 @click.option("--models-dir", default=DEFAULT_MODELS_DIR, show_default=True)
 @click.option("--db", "db_path", default=DEFAULT_DB_PATH, show_default=True)
 @click.option("--epochs", default=3, show_default=True, type=int)
-@click.option("--batch-size", default=16, show_default=True, type=int)
+# batch_size=4 keeps MultipleNegativesRankingLoss training within the slice's
+# 15 GB CPU box: peak RSS scales with batch_size * (anchor+positive+negatives) *
+# seq_len * layers, and 16 OOM-killed the run mid-fit (~16 GB). 4 peaks ~7 GB.
+# Raise it on a GPU / larger-memory host where headroom allows.
+@click.option("--batch-size", default=4, show_default=True, type=int)
 @click.option("--lr", default=2e-5, show_default=True, type=float)
 @click.option("--seed", default=0, show_default=True, type=int)
 @click.option("--no-cache", is_flag=True, help="Disable the LLM response cache.")

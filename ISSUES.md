@@ -101,28 +101,38 @@
 
 ## Pipeline / design traps
 
-### Training save OOM-killed by sentence-transformers model-card generation
+### Training OOM-killed — MultipleNegativesRankingLoss memory scales with batch_size
 
 - **Date / session:** 2026-06-12, Claude Code
-- **Symptom:** A real `finetune` run died with no Python traceback right after the training
-  fit, at the log line `Computing widget examples`. `dmesg`: `Out of memory: Killed process
+- **Symptom:** A real `finetune` run died with no Python traceback during the training phase
+  (last log line `Computing widget examples`). `dmesg`: `Out of memory: Killed process
   (python) anon-rss:15953472kB` — ~15.2 GB, the full container budget. The candidate
-  checkpoint dir was created but empty; the job row stayed stuck at `status=training`.
-- **Root cause:** `SentenceTransformer.save()` defaults to `create_model_card=True`, whose
-  "Computing widget examples" step runs an inference pass to populate the HF model card.
-  Layered on the training process's already-resident memory (base model + Adam state +
-  gradients + the still-held mining embedder/reranker + embedded Qdrant), that pass drove
-  peak RSS past 15 GB and the kernel OOM-killer reaped the process mid-save.
-- **Fix:** `model.save(output_dir, create_model_card=False)` in `_default_train_fn`
-  (`helix/rag/trainer/train.py`). We never consume the model card for an internal checkpoint,
-  so skipping it removes the inference pass; save just writes weights + config. Peak RSS for
-  the train+save phase drops to ~5–6 GB.
+  checkpoint dir was created but empty; the job row stayed stuck at `status=training`. RSS
+  held steady at ~3.2 GB through all of mining, then spiked to 15 GB during the fit.
+- **Root cause:** `MultipleNegativesRankingLoss` retains backprop activations for *every* text
+  in each batch element — anchor + positive + N hard negatives (6 texts at
+  `negatives_per_query=4`). Peak memory ≈ `batch_size * texts * seq_len * hidden * layers`.
+  At the default `batch_size=16` that is ~16 GB and OOMs. **Not the model card** — disabling
+  `create_model_card` (first attempt) did not help; the fit itself was the driver. The
+  `Computing widget examples` line was just the last thing logged before the kill, not the
+  cause. Confirmed by an isolated repro (no re-mining): batch 16 → OOM (15.9 GB), batch 4 →
+  fit OK at **7.28 GB** peak. Nomic's `max_seq_length` defaults to 8192, but indexed passages
+  are short (max ~317 tokens), so sequence length was not the lever here — batch size was.
+- **Fix:** (`helix/cli.py`, `helix/rag/trainer/train.py`)
+  1. `finetune` CLI `--batch-size` default 16 → **4** (peaks ~7 GB on the 15 GB box; raise on
+     a GPU host).
+  2. `_default_train_fn` caps `model.max_seq_length` to 512 (the corpus chunk size) — a no-op
+     for in-distribution passages but bounds the worst case if a future corpus has long docs.
+  3. Kept `create_model_card=False` (trims unused save work; corrected its comment so it no
+     longer claims to be the OOM fix).
 - **Guard:** none direct (the stub train backend used in unit tests bypasses
-  `_default_train_fn`). Covered operationally: the run monitor now tracks process `VmRSS`.
-- **Watch for:** a run that dies with no traceback near `Computing widget examples`, or
+  `_default_train_fn` and never loads the real model). Covered operationally: the run monitor
+  tracks process `VmRSS`; the isolated memory repro is the reference if defaults change.
+- **Watch for:** a training-phase death with no traceback near `Computing widget examples`, or
   `status` stuck at `training` with an empty checkpoint dir → check `dmesg` for an OOM kill
-  before assuming a code bug. Re-mining is avoidable: the mined `failure_cases` persist in
-  SQLite and the LLM cache is warm, so a re-run's mining phase is cache-dominated and fast.
+  before assuming a code bug. Raising `--batch-size` or `negatives_per_query` re-inflates peak
+  memory linearly. Re-mining is avoidable: mined `failure_cases` persist in SQLite and the LLM
+  cache is warm, so a re-run's mining phase is cache-dominated and fast.
 
 
 ### Mining eval was all-or-nothing under provider errors
