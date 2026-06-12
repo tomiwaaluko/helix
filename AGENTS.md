@@ -94,6 +94,10 @@ If the session produced no changes (e.g., you only investigated something), appe
 
 Do not skip this step. The next agent — possibly a different tool — depends on it.
 
+### Log issues as you hit them
+
+Whenever you run into a non-trivial problem — an environment quirk, a third-party bug, a silent failure or no-op, a design trap, a missing dependency surfaced only at runtime — append an entry to `ISSUES.md` describing the symptom, root cause, fix, and any guard (test/lint/CI) that keeps it fixed. Use the template at the top of that file. Do this **when you solve the issue**, not only at session end, so the record is accurate while it's fresh. The goal is that no agent re-debugs a problem we already understand. If a fix you ship resolves an issue already logged, update that entry rather than adding a duplicate.
+
 ## Commands
 
 | Command | Phase | Purpose | Time |
