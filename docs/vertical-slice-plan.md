@@ -902,3 +902,37 @@ In the meantime the slice has:
 
 The negative result is a real result. It tells us the system works as built, and that the
 research hypothesis needs harder ground to stand on.
+
+### Per-question flip analysis (run 4 vs base)
+
+Per-question comparison using the identical HybridRetriever setup as the canary
+(base embedder + `corpus.base` vs run-4 fine-tuned embedder + `corpus.candidate.d968f...`):
+
+| Category | Count |
+|---|---|
+| Both hit (recall=1.0 both arms) | 82 |
+| Hit → Miss (fine-tune regression) | 6 |
+| Miss → Hit (fine-tune improvement) | 3 |
+| Both miss | 9 |
+
+Net: −3 questions, Δ = −0.015 (matches canary).
+
+**All 6 regressions share an identical signature: recall 1.00 → 0.50.** Every hurt question is a
+2-hop question with 2 gold docs. The fine-tuned retriever finds exactly one and drops the other.
+None of the regressions are total misses — the model finds half the required evidence correctly,
+suggesting the embedding shift helps one entity type while de-ranking the other.
+
+Hurt questions (sample):
+- *"The football manager who recruited David Beckham managed Manchester United during what time"*
+- *"This singer of A Rather Blustery Day also voiced what hedgehog?"*
+- *"What was the name of the 1996 loose adaptation of Romeo & Juliet..."*
+
+The 3 improvements are the same 0.50 → 1.00 pattern in the opposite direction:
+- *"The director of the romantic comedy Big Stone Gap is based in what New York city?"*
+
+**Mechanism:** With only 62 training triplets, the fine-tune nudges the embedding space for the
+specific entity types that appeared in those failures. For a handful of questions this helps the
+second gold doc surface; for a different handful it pushes the second doc below the reranker
+cutoff. The changes are real (not noise) but small and not generalizable from 62 examples — the
+net effect cancels with a slight negative bias. With ~6× more triplets (achievable at ~0.65
+base-level recall on a harder corpus), the signal should dominate the noise.

@@ -135,8 +135,11 @@ candidate worth measuring.
 
 **Gotchas hit**
 
-- **All canary deltas so far are within noise.** Don't report any single run's delta as a
-  result without checking CI overlap. With 100 dev questions, 1 question = 0.01 recall.
+- **All canary deltas so far are within noise — but the per-question analysis shows the
+  changes are real.** Run 4's Δ −0.015 decomposes to exactly 6 hit→miss and 3 miss→hit. ALL 6
+  regressions are 1.00→0.50 on 2-hop questions (fine-tune finds one gold doc, drops the other).
+  The mechanism is real but the net is −3 questions at 0.01 per question. With 100 dev questions,
+  1 question = 0.01 recall — too coarse to tell signal from sign-flip.
 - **Run 3's all-or-nothing mining kill**: see ISSUES.md. 1000-q split exceeds session lifetime.
 - Otherwise same gotchas as the 07:36 entry below (alias rollback, LiteLLM TimeoutError noise).
 
