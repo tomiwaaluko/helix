@@ -1,5 +1,13 @@
 ## Unreleased
 
+- **New baseline on full 15 512-doc corpus** (`evals/baselines/hotpotqa_dev_100_baseline.json`).
+  After rebuilding `corpus.base` from the complete 15 568-chunk index, re-ran the 100-question
+  dev eval: `retrieval_recall@10 = 0.6500 [0.6050, 0.6950]`, `answer_f1 = 0.1492 [0.1277,
+  0.1734]`, `citation_precision = 0.8915 [0.8475, 0.9357]`. The slight recall drop from the
+  prior estimate (~0.69) is expected — the larger corpus introduces more distractors for
+  the same set of gold documents. This is now the authoritative baseline for the fine-tune
+  comparison.
+
 - **Fix: cache `_tiktoken_counter()` result after first call** (`helix/rag/chunker.py`). With
   `token_counter=None` (the CLI default), every `chunk_document` call previously retried the
   tiktoken `cl100k_base` blob download, adding ~10 min of failing HTTP round-trips before
