@@ -1,5 +1,17 @@
 ## Unreleased
 
+- **First promoted fine-tune run (run 2) — clean apples-to-apples result.**
+  Re-ran `helix.cli finetune` after rebuilding `corpus.base` from the full 15 568-chunk corpus
+  so both arms searched identical-size indices. Results:
+  - Mining: 19/150 train questions failed direct retrieval (vs 142/150 in run 1 — the larger
+    corpus covers more training questions). 19 failure cases → 19 contrastive triplets.
+  - Training: 3 epochs, train_loss=1.53 (92 s; fewer examples than run 1).
+  - Canary eval: before recall@10 = 0.9400, after recall@10 = 0.9500, Δ = **+0.0100**.
+  - Decision: **promoted**. `corpus.active` alias now points to the fine-tuned candidate
+    collection (`b72904285aef4680b447728cbfb2ec05`).
+  - Note: direct-retrieval recall (0.94/0.95) remains much higher than end-to-end eval recall
+    (0.6500); the bottleneck is LLM sub-question decomposition, not the retriever.
+
 - **New baseline on full 15 512-doc corpus** (`evals/baselines/hotpotqa_dev_100_baseline.json`).
   After rebuilding `corpus.base` from the complete 15 568-chunk index, re-ran the 100-question
   dev eval: `retrieval_recall@10 = 0.6500 [0.6050, 0.6950]`, `answer_f1 = 0.1492 [0.1277,

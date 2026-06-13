@@ -27,6 +27,66 @@
 
 ---
 
+## 2026-06-13 01:57 UTC — Claude Code → next session
+
+**Last commit:** `a9ac797` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** dirty: CHANGELOG.md, HANDOFF.md (this commit)
+
+```
+$ git log -1 --oneline
+a9ac797 eval: update baseline results for full 15568-chunk corpus
+$ git status --short
+ M CHANGELOG.md
+ M HANDOFF.md
+```
+
+**What shipped this session**
+
+- **Baseline eval completed**: `hotpotqa_dev_100_baseline.json` updated with full-corpus numbers:
+  `retrieval_recall@10 = 0.6500 [0.6050, 0.6950]`, `answer_f1 = 0.1492`, `citation_precision =
+  0.8915`. This is the authoritative baseline going forward.
+- **Finetune run 2 completed and promoted** (job `b72904285aef4680b447728cbfb2ec05`):
+  - Mining: 19/150 train questions failed (vs 142/150 in run 1 — full corpus covers more train Qs)
+  - 19 failure cases → 19 contrastive triplets
+  - Training: 3 epochs, train_loss=1.53, train_runtime=92 s
+  - Canary: before=0.9400, after=0.9500, Δ=+0.0100 — **first positive delta, job promoted**
+  - `corpus.active` alias now points to the fine-tuned candidate collection
+  - Checkpoint: `data/models/b72904285aef4680b447728cbfb2ec05/`
+
+**What's next**
+
+1. **Re-run `make eval`** on the promoted corpus to measure end-to-end workflow recall with the
+   fine-tuned retriever. Compare against the 0.6500 baseline. Expected to show same or slightly
+   better recall (the retriever delta was only +0.01 at direct-retrieval level; the LLM
+   sub-question bottleneck caps the ceiling).
+2. **Consider enlarging the training split**: only 19 triplets trained this run. The mining
+   threshold is too easy for the full corpus. Options:
+   a. Use a harder train split (questions where gold docs are harder to find)
+   b. Lower the retrieval pass@k threshold in mining to generate more failures
+   c. Use the holdout-adjacent distribution (but NOT the holdout itself)
+3. **Investigate the bottleneck**: direct-retrieval recall (0.94) vs workflow recall (0.65) gap
+   of 0.29 suggests sub-question decomposition is losing ~29% of questions. Profiling which
+   sub-question generation patterns cause misses would help.
+4. Update `docs/vertical-slice-plan.md` if the scope has shifted.
+
+**Open questions / decisions pending**
+
+- With only 19 triplets and Δ=+0.01, how much of the gain is noise vs real? The CI overlap
+  between 0.94 and 0.95 on 100 questions is probably substantial. Consider a larger canary
+  set or more training examples before drawing conclusions.
+- Should `corpus.active` be rolled back if the workflow eval shows no improvement?
+
+**Gotchas hit**
+
+- **Mining yield drops sharply with full corpus**: run 1 had 142/150 failures (old 5 937-chunk
+  corpus); run 2 had only 19/150 (15 568-chunk corpus). The larger corpus is so much better at
+  direct retrieval that there are very few hard negatives to mine from. The fine-tune signal
+  comes from a smaller, possibly less representative slice of the difficulty distribution.
+- **train_loss jumped from 0.336 → 1.53**: fewer examples (19 vs 291) means fewer gradient
+  steps and less convergence. Don't compare loss values across runs with different triplet counts.
+
+---
+
 ## 2026-06-12 23:44 UTC — Claude Code → next session
 
 **Last commit:** `90c3df8` on `claude/eloquent-clarke-qiha1x`
