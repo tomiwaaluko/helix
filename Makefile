@@ -1,4 +1,4 @@
-.PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down
+.PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down seed-bright check-bright
 
 # Boot Qdrant (the only external dependency for the slice)
 dev:
@@ -52,6 +52,22 @@ eval-final:
 
 test:
 	cd worker && python3.12 -m pytest tests/ -x -q
+
+# BRIGHT biology mini-experiment
+# Downloads BRIGHT, builds corpus (~10.5k docs) and BM25 index, indexes into Qdrant.
+seed-bright: evals/datasets/bright_biology_dev.jsonl
+	python3.12 -m helix.cli index \
+	  --corpus data/bright_corpus.jsonl \
+	  --collection corpus.bright \
+	  --alias corpus.bright.active \
+	  --bm25 data/bright_bm25_index.pkl
+
+evals/datasets/bright_biology_dev.jsonl data/bright_corpus.jsonl:
+	python3.12 scripts/prepare_bright.py
+
+# Measure direct-retrieval recall@10 on BRIGHT biology (no LLM calls).
+check-bright:
+	PYTHONPATH=worker python3.12 scripts/check_bright_recall.py
 
 lint:
 	PYTHONPATH=worker python3.12 scripts/check_holdout_integrity.py
