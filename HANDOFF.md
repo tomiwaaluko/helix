@@ -87,6 +87,71 @@ $ git status --short
 
 ---
 
+## 2026-06-13 07:36 UTC — Claude Code → next session
+
+**Last commit:** `0fdea62` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** dirty: evals/datasets/hotpotqa_train_400.jsonl (new), ISSUES.md, HANDOFF.md
+
+```
+$ git log -1 --oneline
+0fdea62 docs: record promoted finetune run 2 results and updated HANDOFF
+$ git status --short
+?? evals/datasets/hotpotqa_train_400.jsonl
+ M ISSUES.md
+ M HANDOFF.md
+```
+
+**What shipped this session**
+
+- **Diagnosed and fixed alias corruption risk**: After run 2 promoted, `corpus.active` →
+  fine-tuned candidate. The "before" arm of the next canary uses the base embedder but searches
+  whatever `corpus.active` points to — searching fine-tuned doc vectors with base-model query
+  vectors would manufacture a false "before" depression and a spurious promotion. Rolled alias
+  back to `corpus.base` (15 568 points) before launching run 3.
+- **Run 3 (train=1000q) died at ~4.5h**: all-or-nothing `evaluate()` commit means 0 failure_cases
+  were saved. Logged in ISSUES.md. Root cause: mining 1 000 cold questions exceeds container
+  session lifetime.
+- **Created hotpotqa_train_400.jsonl** (first 400 of 1 000): qs 1–150 warm, 151–400 cold.
+  Estimated 1–1.5h mining, ~50 failures.
+- **Run 4 launched** (PID 7130): `finetune_run4_train400.log`. In progress at session end.
+
+**What's next**
+
+1. **Wait for run 4 PID 7130** to complete (~1–1.5h mining + ~30 min training + ~50 min promotion).
+   Check: `tail -20 data/run_logs/finetune_run4_train400.log`
+   Success line: `Fine-tune job <id>: promoted|archived`
+2. **If promoted**: run `make eval` on the promoted corpus to get workflow-level delta vs the
+   0.6500 baseline. If Δ is meaningful, then consider `make eval-final` (but get explicit
+   go-ahead first — it's one-shot).
+3. **If archived**: consider tuning — more epochs, lower mining threshold, or a different
+   train/dev split before spending the holdout.
+4. **Future hardening**: incremental `save_failure_cases` per-example inside `evaluate()` so
+   killed runs preserve partial progress (see ISSUES.md entry above).
+5. Commit and push: `hotpotqa_train_400.jsonl`, ISSUES.md, HANDOFF.md.
+
+**Open questions / decisions pending**
+
+- What's the right threshold to decide "this delta is real enough to spend the holdout"?
+  With 100 dev questions, each 0.01 recall delta = 1 question. Suggest: at least +0.02 with
+  non-overlapping 95% CIs on the canary before pulling `eval-final`.
+- Should `corpus.active` auto-rollback on process kill? Currently left pointing at whatever
+  the last promotion set. Always check meta.json before starting a new finetune run.
+
+**Gotchas hit**
+
+- **After any promotion, always roll `corpus.active` back to `corpus.base` before the next
+  finetune run.** The "before" arm is hardwired to the base embedder; if `corpus.active` points
+  at a fine-tuned collection, the before/after comparison is invalid. Quick rollback script
+  is in `/tmp/rollback_alias.py`.
+- **Run 3 stale job**: DB has job `0119ab03c23c` at status=`mining` with no failure_cases.
+  This is a dead run. It won't affect future runs (no Qdrant candidate collection was created
+  for it; the alias wasn't touched).
+- **LiteLLM logging-worker TimeoutError is benign**: appears in logs as a Traceback but is
+  a background async logging task, not a user-code error. The LLM calls themselves succeeded.
+  Don't confuse this for the cause of a process death.
+
+---
+
 ## 2026-06-12 23:44 UTC — Claude Code → next session
 
 **Last commit:** `90c3df8` on `claude/eloquent-clarke-qiha1x`

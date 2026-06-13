@@ -23,6 +23,30 @@
 
 ---
 
+## Fine-tune loop
+
+### Mining evaluate() is all-or-nothing — 1 000-question run killed before commit
+
+- **Date / session:** 2026-06-13, Claude Code
+- **Symptom:** `helix.cli finetune --train hotpotqa_train_1000.jsonl` ran for ~4.5 hours,
+  made hundreds of LLM calls, exited with status `mining` in the DB, and wrote 0
+  failure_cases. No Python traceback; LiteLLM logging-worker `TimeoutError` is benign noise.
+- **Root cause:** `_finetune()` calls `evaluate()` over all N questions and only calls
+  `store.save_failure_cases()` *after* the full eval completes (cli.py line ~396). With
+  1 000 questions and a mostly-cold LLM cache, the mining run exceeds the container session
+  lifetime (~4–5 h) and the process is killed before committing anything.
+- **Fix (this session):** Created `evals/datasets/hotpotqa_train_400.jsonl` (first 400 lines
+  of the 1 000-question file). Questions 1–150 are in the LLM cache (warm, ~5 min);
+  questions 151–400 are cold (~45–60 min). Total mining: ~1–1.5 h. Generates ~50 failures
+  at the observed 12.7% failure rate — enough for a real training signal.
+- **Guard:** none yet. The real fix is incremental persistence in `evaluate()` (commit each
+  result as it arrives, not batch at the end). Worth doing if the split-size workaround
+  proves fragile.
+- **Watch for:** job stuck at status=`mining` in the DB after the process exits; 0 new
+  failure_cases after the process started.
+
+---
+
 ## Environment & tooling
 
 ### `sqlite3` CLI is not installed
