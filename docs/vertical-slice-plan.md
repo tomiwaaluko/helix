@@ -828,3 +828,77 @@ dev-100 (questions 0–100); the holdout-500 (questions 100–600) stays sequest
 
 The heavy backends (training fit, candidate indexing, canary retrieval) are all injectable, so
 the full loop is unit-tested end-to-end without a model or a Qdrant server.
+
+---
+
+## Experimental results (M0 slice — 2026-06-12/13)
+
+### Baseline (authoritative, full corpus)
+
+Established after rebuilding `corpus.base` from the full 15 512-doc corpus (15 568 chunks):
+
+| Metric | Mean | 95% CI |
+|---|---|---|
+| `answer_f1` | 0.1492 | [0.1277, 0.1734] |
+| `citation_precision` | 0.8915 | [0.8475, 0.9357] |
+| `retrieval_recall@10` | 0.6500 | [0.6050, 0.6950] |
+
+Model: `claude-sonnet-4-6`. Embedding: `nomic-ai/nomic-embed-text-v1.5`. 100 questions.
+File: `evals/baselines/hotpotqa_dev_100_baseline.json`.
+
+### Fine-tune loop runs
+
+| Run | Train split | Triplets | Before recall@10 [95% CI] | After recall@10 [95% CI] | Δ | Outcome |
+|---|---|---|---|---|---|---|
+| 1 | train_150 (confounded) | 291 | 0.960 [0.930, 0.985] | 0.935 [0.900, 0.965] | −0.025 | archived |
+| 2 | train_150 | 19 | 0.940 [0.905, 0.970] | 0.950 [0.920, 0.975] | +0.010 | promoted¹ |
+| 3 | train_1000 | — | — | — | — | killed² |
+| 4 | train_400 | 62 | 0.940 [0.905, 0.970] | 0.925 [0.885, 0.960] | −0.015 | archived |
+
+¹ Run 2's corpus.active alias was subsequently rolled back; the delta is within noise.
+² Run 3 was killed at ~4.5h (container session ceiling) before mining completed; 0 failure_cases saved.
+
+**All three completed runs have overlapping 95% CIs. No run shows a statistically significant
+effect in either direction.**
+
+### Why the fine-tune loop cannot be validated on this dataset
+
+The canary's "before" arm measures `HybridRetriever.retrieve(question, top_k=10)` — a single
+direct retrieval pass, not the full `deep_research` workflow sub-question decomposition. On the
+HotpotQA dev set, the base hybrid retriever scores **0.94–0.96 recall@10** at this level. This
+creates two compounding problems:
+
+1. **No headroom.** With 94–96 of 100 questions already hitting the gold doc in the top-10, a
+   fine-tuned model can improve recall on at most 4–6 questions. That's ≤0.06 theoretical ceiling
+   on the delta — and sampling noise on 100 questions is ±0.03–0.05 (one question = 0.01 recall).
+   The measurement tool is too coarse to distinguish real lift from noise.
+
+2. **Very few hard negatives.** With such high base recall, the mining phase finds few failures:
+   only 19/150 on the full corpus (12.7% failure rate), and 62/400 from the extended split.
+   The fine-tune gets almost no signal — it learns from a tiny, unrepresentative slice of the
+   difficulty distribution, then is evaluated on the easy majority where it has nothing to improve.
+
+3. **Retrieval is not the workflow bottleneck.** The end-to-end eval gives `retrieval_recall@10 =
+   0.65`, while the canary gives 0.94. The gap (0.29) is caused by the LLM sub-question
+   decomposition, not the retriever. Improving the retriever by +0.01 at the direct-retrieval
+   level is unlikely to move the workflow-level number, which depends on whether the LLM generates
+   sub-questions that hit the gold document.
+
+### Conclusion and path forward
+
+The thesis — *mined-failure fine-tuning of the embedding model measurably improves recall over a
+strong baseline* — **cannot be demonstrated on HotpotQA dev** because the baseline is too strong.
+
+To demonstrate it, the experiment needs a harder evaluation target where the base retriever scores
+≤0.70, providing real headroom and meaningful mining yield. The target-state corpus (BRIGHT) is
+the right vehicle — it is designed for retrieval-hard queries that existing strong baselines
+struggle with, giving the fine-tune loop something real to learn from.
+
+In the meantime the slice has:
+- ✅ Built and validated the full mine → train → promote pipeline end-to-end
+- ✅ Established authoritative baselines for all three metrics on the full 15 512-doc corpus
+- ✅ Proven the canary framework is correct (alias rollback, CI measurement, hybrid retriever parity)
+- ✅ Documented where the bottleneck actually lives (LLM decomposition, not retrieval)
+
+The negative result is a real result. It tells us the system works as built, and that the
+research hypothesis needs harder ground to stand on.
