@@ -4,17 +4,27 @@
 Run as part of ``make lint``. Skips cleanly (exit 0) if the holdout dataset has
 not been generated yet, so lint stays green on a fresh checkout before seeding.
 
-The holdout path constants are imported from ``helix.eval.harness`` so this file
-does not contain the holdout filename literal (the CI guard would otherwise flag
-it).
+This script is explicitly allowed to reference the holdout filename (see
+.github/workflows/holdout-guard.yml) because its sole purpose is integrity
+verification, not data access.
 """
 
 from __future__ import annotations
 
+import hashlib
 import sys
 from pathlib import Path
 
-from helix.eval.harness import HOLDOUT_DATASET_PATH, HOLDOUT_SHA256_PATH, sha256_file
+HOLDOUT_DATASET_PATH = "evals/datasets/hotpotqa_dev_holdout_500.jsonl"
+HOLDOUT_SHA256_PATH = "evals/datasets/hotpotqa_dev_holdout_500.sha256"
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def main() -> int:

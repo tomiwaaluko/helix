@@ -3,6 +3,75 @@
 > Latest at top. Both agents update this before ending a session, per the Session protocol in `AGENTS.md`.
 > If you're picking up work, read the top entry and `docs/vertical-slice-plan.md`.
 
+---
+
+## 2026-06-13 21:15 UTC — Claude Code → next session
+
+**Last commit:** `84cbe20` on `claude/eloquent-clarke-qiha1x` (pending M0 close commit)
+**Working tree:** dirty: Makefile, CHANGELOG.md, HANDOFF.md, worker/pyproject.toml,
+  worker/helix/rag/trainer/train.py, scripts/check_holdout_integrity.py,
+  .github/workflows/holdout-guard.yml
+
+**Task plan position:** M0 complete — closing out cleanly before BRIGHT mini-experiment (next)
+
+**What shipped this session**
+
+- **Per-question flip analysis**: ran HybridRetriever comparison of all 100 dev questions
+  between base and run-4 fine-tuned embedder. Result: 82 no-change, 6 hit→miss, 3 miss→hit,
+  9 both-miss. All 6 regressions are 1.00→0.50 (exactly one of two gold docs dropped per
+  2-hop question). Mechanism: 62 triplets nudge embeddings in a direction that helps one
+  entity type per question pair while de-ranking the other.
+- **Negative finding written up** in `docs/vertical-slice-plan.md` (sections "Experimental
+  results" + "Per-question flip analysis"). Complete, honest, citable for the next milestone.
+- **`make lint` fixed**: was completely broken (system mypy runs on Python 3.11, can't parse
+  Python 3.12 syntax). Now uses `python3.12 -m mypy` + `PYTHONPATH=worker python3.12` for
+  the holdout check. `make lint` passes clean. `make test` uses `python3.12 -m pytest`.
+- `scripts/check_holdout_integrity.py` made standalone (no helix import). CI guard updated.
+- `worker/pyproject.toml`: mypy overrides extended for all missing third-party packages.
+
+**What's next**
+
+1. **BRIGHT mini-experiment** — one domain (e.g. biology), Wikipedia corpus subset, same
+   slice pipeline. Goal: confirm base recall is ≤0.70 on harder queries, giving real headroom
+   for fine-tune lift. Reuses all existing tooling (indexer, retriever, harness, finetune CLI).
+   New work: `scripts/prepare_bright.py`, possibly a new eval dataset format adapter.
+   Estimated: 1–2 days.
+2. If BRIGHT base recall ≤0.70: run one finetune, measure delta with non-overlapping CIs →
+   thesis validated → proceed to M1 planning.
+3. If BRIGHT also ceilings: the hypothesis has a deeper problem. Document and reassess before M1.
+4. **Do NOT run `make eval-final`** until there is a promoted candidate with a real positive
+   delta. The holdout is sequestered for measuring the final fine-tuned result, not the baseline.
+
+**Open questions / decisions pending**
+
+- Which BRIGHT domain to pick? Biology and math are retrieval-hard; law (CUAD) may also work.
+  The domain should have Wikipedia-compatible passages so we can reuse the existing indexer.
+- Stale mining job `0119ab03c23c` (run 3) in DB — still shows as `mining` status. Harmless
+  but could be archived for hygiene before the next finetune run.
+
+**Gotchas hit**
+
+- `make lint` was silently broken: global `mypy` (shebang: python3.11) can't parse
+  PEP 695 `class Task[**P, R]:` syntax. Fix: `python3.12 -m mypy`. Requires
+  `python3.12 -m pip install --break-system-packages mypy` in the container.
+- `scripts/check_holdout_integrity.py` imported from `helix.eval.harness` which chains through
+  `aiosqlite`, making `make lint` fail outside the venv. Fixed by making script standalone.
+- `make test` target used bare `python` (3.11); now uses `python3.12`. Requires
+  `python3.12 -m pip install --break-system-packages -e '.[dev]'` in the container.
+
+```
+$ git log -1 --oneline
+84cbe20 docs: add per-question flip analysis for run 4 fine-tuned retriever
+$ git status --short
+ M .github/workflows/holdout-guard.yml
+ M CHANGELOG.md
+ M HANDOFF.md
+ M Makefile
+ M scripts/check_holdout_integrity.py
+ M worker/helix/rag/trainer/train.py
+ M worker/pyproject.toml
+```
+
 ## Entry template
 
 ```

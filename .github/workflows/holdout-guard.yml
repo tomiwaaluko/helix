@@ -17,7 +17,8 @@ jobs:
         run: |
           set -euo pipefail
           matches="$(grep -rl --include='*.py' 'hotpotqa_dev_holdout_500.jsonl' . \
-            | grep -v -e 'worker/helix/eval/harness.py' -e 'scripts/prepare_hotpotqa.py' || true)"
+            | grep -v -e 'worker/helix/eval/harness.py' -e 'scripts/prepare_hotpotqa.py' \
+                     -e 'scripts/check_holdout_integrity.py' || true)"
           if [ -n "$matches" ]; then
             echo "Unauthorized holdout filename reference in:"
             echo "$matches"

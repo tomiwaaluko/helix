@@ -51,11 +51,11 @@ eval-final:
 	  --output evals/baselines/hotpotqa_holdout_500_result.json
 
 test:
-	cd worker && python -m pytest tests/ -x -q
+	cd worker && python3.12 -m pytest tests/ -x -q
 
 lint:
-	python scripts/check_holdout_integrity.py
-	cd worker && ruff check . && mypy --strict helix/
+	PYTHONPATH=worker python3.12 scripts/check_holdout_integrity.py
+	cd worker && ruff check . && python3.12 -m mypy --strict helix/
 
 fmt:
 	cd worker && ruff format . && ruff check --fix .

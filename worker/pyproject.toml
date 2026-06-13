@@ -48,8 +48,23 @@ module = [
   "sentence_transformers.*",
   "tiktoken",
   "rank_bm25",
+  "aiosqlite",
+  "qdrant_client",
+  "qdrant_client.*",
+  "numpy",
+  "numpy.*",
+  "torch",
+  "torch.*",
+  "safetensors",
+  "safetensors.*",
+  "click",
+  "click.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["helix.cli"]
+disallow_untyped_decorators = false
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

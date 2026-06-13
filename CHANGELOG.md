@@ -1,5 +1,28 @@
 ## Unreleased
 
+- **Per-question flip analysis for run 4 (fine-tune regression mechanism documented).**
+  Full HybridRetriever comparison of base vs run-4 fine-tuned embedder on all 100 dev
+  questions: 82 no-change, 6 hit→miss, 3 miss→hit, 9 both-miss. All 6 regressions follow
+  the same pattern: recall 1.00→0.50 on 2-hop questions — the fine-tuned model finds one
+  gold doc but drops the second. Mechanism documented in `docs/vertical-slice-plan.md`.
+
+- **`make lint` fixed: now works without venv activated.**
+  - `Makefile`: use `PYTHONPATH=worker python3.12` for holdout integrity check, `python3.12 -m mypy`
+    for type-checking. No longer requires the active venv for these targets.
+  - `scripts/check_holdout_integrity.py`: made standalone (no helix import, no transitive deps).
+    Added to CI guard allowlist in `.github/workflows/holdout-guard.yml`.
+  - `worker/pyproject.toml`: extended mypy `ignore_missing_imports` to cover `aiosqlite`,
+    `qdrant_client`, `numpy`, `torch`, `safetensors`, `click`; added `disallow_untyped_decorators
+    = false` override for `helix.cli`. Removes false positives when type-checking outside venv.
+  - `worker/helix/rag/trainer/train.py`: removed now-redundant `# type: ignore[arg-type]` on
+    `DataLoader` call (becomes unused when torch is in `ignore_missing_imports`).
+
+- **Experimental findings written up in `docs/vertical-slice-plan.md`.**
+  New section "Experimental results (M0 slice)" documents: authoritative baseline, all 4 run
+  results, ceiling-effect analysis (0.94 base recall → no headroom), bottleneck diagnosis
+  (LLM sub-question decomposition loses 0.29 recall, not the retriever), per-question flip
+  breakdown, and path forward (BRIGHT corpus).
+
 - **Fine-tune lift on the HotpotQA dev set is not statistically detectable (3-run summary).**
   After fixing the corpus mismatch (run 2) and the stale-alias bug (run 4 — the first
   fully valid before/after), the canary recall@10 deltas across all completed runs are:
