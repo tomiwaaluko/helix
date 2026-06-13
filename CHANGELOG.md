@@ -1,5 +1,25 @@
 ## Unreleased
 
+- **BRIGHT biology mini-experiment: base recall@10 = 0.2572 (headroom confirmed).**
+  Indexed 10,372-doc corpus (372 gold + 10k sampled distractors), measured
+  HybridRetriever recall@10 on all 103 biology queries. Full hits: 7, partial: 46,
+  misses: 50. Dramatic contrast with HotpotQA (0.94): BRIGHT provides the headroom
+  needed to validate the fine-tune thesis. Fine-tune run initiated.
+
+- **`finetune` CLI parameterised for arbitrary base collection + promotion alias.**
+  Added `--collection` (base arm for mining + canary before-arm) and `--promotion-alias`
+  (alias to swap on promotion). Default is `corpus.active` for backward compat.
+  `promote_candidate()` gains `active_alias` kwarg (same default). Enables BRIGHT
+  experiment without touching the HotpotQA corpus or `corpus.active` alias.
+
+- **BRIGHT biology data pipeline added.**
+  `scripts/prepare_bright.py`: downloads xlangai/BRIGHT biology, produces
+  `data/bright_corpus.jsonl` (gold + sampled distractors) and
+  `evals/datasets/bright_biology_dev.jsonl` (103 queries in Helix eval format).
+  `scripts/check_bright_recall.py`: direct HybridRetriever recall check (no LLM calls).
+  Makefile: `seed-bright`, `check-bright`, `finetune-bright` targets.
+  Splits: `bright_biology_train.jsonl` (80 q, mining) + `bright_biology_canary.jsonl` (23 q).
+
 - **Per-question flip analysis for run 4 (fine-tune regression mechanism documented).**
   Full HybridRetriever comparison of base vs run-4 fine-tuned embedder on all 100 dev
   questions: 82 no-change, 6 hit→miss, 3 miss→hit, 9 both-miss. All 6 regressions follow
