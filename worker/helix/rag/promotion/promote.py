@@ -188,13 +188,14 @@ async def promote_candidate(
     config: PromoteConfig | None = None,
     index_fn: IndexFn | None = None,
     retrieve_fn: RetrieveFn | None = None,
+    active_alias: str = ACTIVE_ALIAS,
 ) -> PromoteResult:
     """Index the candidate checkpoint, canary-eval on dev examples, and promote if better.
 
     Raises ``ValueError`` when ``examples`` is empty — there is nothing to measure.
 
-    The alias ``corpus.active`` is swapped to the candidate collection only when
-    ``after.mean > before.mean``.  The job record in ``store`` is updated to
+    The ``active_alias`` (default ``corpus.active``) is swapped to the candidate collection
+    only when ``after.mean > before.mean``.  The job record in ``store`` is updated to
     ``promoted`` or ``archived`` with full CI metrics regardless of outcome.
     """
     if not examples:
@@ -217,7 +218,7 @@ async def promote_candidate(
     before_scores: list[float] = []
     for ex in examples:
         gold = _gold_doc_ids(ex)
-        retrieved = await _retrieve(str(ex.input.get("question", "")), ACTIVE_ALIAS, cfg.top_k)
+        retrieved = await _retrieve(str(ex.input.get("question", "")), active_alias, cfg.top_k)
         before_scores.append(_recall_at_k(retrieved, gold, cfg.top_k))
 
     # Step 3: after recall — candidate collection with candidate embedder
@@ -235,7 +236,7 @@ async def promote_candidate(
     status = "promoted" if promoted else "archived"
 
     if promoted:
-        await adapter.set_alias(ACTIVE_ALIAS, coll)
+        await adapter.set_alias(active_alias, coll)
 
     metrics: dict[str, Any] = {
         "before": before_ci,

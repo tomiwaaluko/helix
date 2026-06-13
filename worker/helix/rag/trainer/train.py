@@ -140,7 +140,7 @@ def _default_train_fn(
     # A list of InputExample is the canonical sentence-transformers map-style
     # dataset (supports __getitem__/__len__); torch's stub only accepts Dataset.
     loader: DataLoader[InputExample] = DataLoader(
-        examples,
+        examples,  # type: ignore[arg-type]  # list[InputExample] satisfies __getitem__/__len__
         shuffle=True,
         batch_size=config.batch_size,
     )

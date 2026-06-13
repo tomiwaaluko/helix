@@ -69,6 +69,20 @@ evals/datasets/bright_biology_dev.jsonl data/bright_corpus.jsonl:
 check-bright:
 	PYTHONPATH=worker python3.12 scripts/check_bright_recall.py
 
+# Mine failures on biology train split, fine-tune, canary-promote on biology canary split.
+# Uses corpus.bright as the base arm; swaps corpus.bright.active alias on promotion.
+finetune-bright:
+	python3.12 -m helix.cli finetune \
+	  --train evals/datasets/bright_biology_train.jsonl \
+	  --eval evals/datasets/bright_biology_canary.jsonl \
+	  --corpus data/bright_corpus.jsonl \
+	  --scorers retrieval_recall@10 \
+	  --bm25 data/bright_bm25_index.pkl \
+	  --qdrant-path data/qdrant \
+	  --collection corpus.bright \
+	  --promotion-alias corpus.bright.active \
+	  --concurrency 4
+
 lint:
 	PYTHONPATH=worker python3.12 scripts/check_holdout_integrity.py
 	cd worker && ruff check . && python3.12 -m mypy --strict helix/

@@ -81,7 +81,13 @@ def _build_candidate_embedder(checkpoint_dir: str, span_logger: SpanLogger) -> E
     return Embedder(model_name=checkpoint_dir, span_logger=span_logger)
 
 
-def _build_adapter(span_logger: SpanLogger, *, url: str, path: str | None) -> QdrantAdapter:
+def _build_adapter(
+    span_logger: SpanLogger,
+    *,
+    url: str,
+    path: str | None,
+    collection_alias: str = "corpus.active",
+) -> QdrantAdapter:
     """Build a Qdrant adapter.
 
     With ``path`` set, run Qdrant embedded in-process against an on-disk store
@@ -90,8 +96,12 @@ def _build_adapter(span_logger: SpanLogger, *, url: str, path: str | None) -> Qd
     if path:
         from qdrant_client import AsyncQdrantClient
 
-        return QdrantAdapter(client=AsyncQdrantClient(path=path), span_logger=span_logger)
-    return QdrantAdapter(url=url, span_logger=span_logger)
+        return QdrantAdapter(
+            client=AsyncQdrantClient(path=path),
+            collection_alias=collection_alias,
+            span_logger=span_logger,
+        )
+    return QdrantAdapter(url=url, collection_alias=collection_alias, span_logger=span_logger)
 
 
 def _build_reranker() -> Reranker:
@@ -266,11 +276,18 @@ async def _index(
 
 
 async def _open_retriever(
-    *, qdrant_url: str, qdrant_path: str | None, bm25_path: str, span_logger: SpanLogger
+    *,
+    qdrant_url: str,
+    qdrant_path: str | None,
+    bm25_path: str,
+    span_logger: SpanLogger,
+    collection_alias: str = "corpus.active",
 ) -> tuple[QdrantAdapter, HybridRetriever]:
     embedder = _build_embedder(span_logger)
     bm25 = BM25Index.load(bm25_path)
-    adapter = _build_adapter(span_logger, url=qdrant_url, path=qdrant_path)
+    adapter = _build_adapter(
+        span_logger, url=qdrant_url, path=qdrant_path, collection_alias=collection_alias
+    )
     retriever = HybridRetriever(embedder, adapter, bm25, _build_reranker(), span_logger=span_logger)
     return adapter, retriever
 
@@ -352,6 +369,8 @@ async def _finetune(
     train_config: TrainConfig,
     promote_config: PromoteConfig,
     span_logger: SpanLogger,
+    collection_alias: str = "corpus.active",
+    promotion_alias: str = "corpus.active",
 ) -> FinetuneResult:
     """Run the full loop: mine failures on the train split, fine-tune, canary-promote.
 
@@ -377,6 +396,7 @@ async def _finetune(
             qdrant_path=qdrant_path,
             bm25_path=bm25_path,
             span_logger=span_logger,
+            collection_alias=collection_alias,
         )
         async with adapter:
             deps = _make_deps(retriever, top_k=top_k, model=model, span_logger=span_logger)
@@ -441,6 +461,7 @@ async def _finetune(
                 config=promote_config,
                 index_fn=index_fn,
                 retrieve_fn=retrieve_fn,
+                active_alias=promotion_alias,
             )
 
         return FinetuneResult(
@@ -628,6 +649,19 @@ def eval(
 @click.option("--seed", default=0, show_default=True, type=int)
 @click.option("--no-cache", is_flag=True, help="Disable the LLM response cache.")
 @click.option("--spans", default=None, help="Span JSONL path (default data/spans.jsonl).")
+@click.option(
+    "--collection",
+    "collection_alias",
+    default="corpus.active",
+    show_default=True,
+    help="Qdrant collection/alias for the base (before) arm of mining and canary.",
+)
+@click.option(
+    "--promotion-alias",
+    default="corpus.active",
+    show_default=True,
+    help="Alias to swap on promotion (default corpus.active; use corpus.bright.active for BRIGHT).",
+)
 def finetune(
     train_dataset: str,
     eval_dataset: str,
@@ -648,6 +682,8 @@ def finetune(
     seed: int,
     no_cache: bool,
     spans: str | None,
+    collection_alias: str,
+    promotion_alias: str,
 ) -> None:
     """Mine retrieval failures on --train, fine-tune the embedder, canary-promote on --eval."""
     if no_cache:
@@ -675,6 +711,8 @@ def finetune(
             train_config=train_config,
             promote_config=promote_config,
             span_logger=logger,
+            collection_alias=collection_alias,
+            promotion_alias=promotion_alias,
         )
     )
     click.echo(f"Fine-tune job {result.job_id}: {result.status}")
