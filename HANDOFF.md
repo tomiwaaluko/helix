@@ -87,6 +87,61 @@ $ git status --short
 
 ---
 
+## 2026-06-13 08:05 UTC — Claude Code → next session
+
+**Last commit:** `1a01e56` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** dirty: CHANGELOG.md, HANDOFF.md (this commit)
+
+```
+$ git log -1 --oneline
+1a01e56 data,docs: add 400-question train split; log mining all-or-nothing kill
+$ git status --short
+ M CHANGELOG.md
+ M HANDOFF.md
+```
+
+**What shipped this session**
+
+- **Run 4 (train_400) completed — first fully valid before/after**, with alias correctly on
+  `corpus.base`. Result: **archived, Δ −0.015** (0.940 → 0.925), 62 triplets.
+- **Cross-run statistical conclusion**: all three completed runs (Δ −0.025, +0.010, −0.015)
+  have heavily overlapping 95% CIs. **No detectable fine-tune effect on dev recall@10.** The
+  base retriever (0.94–0.96) has no headroom on HotpotQA dev. Run 2's +0.01 promotion was noise.
+- `corpus.active` confirmed on `corpus.base` (archived run didn't swap). State is clean.
+
+**What's next — DECISION POINT (raised with maintainer)**
+
+The mechanical "next run" is no longer the right move. Three runs show the approach can't be
+validated on this dev set due to ceiling effects. Options on the table:
+1. **Re-target the canary to a headroom eval set** — measure lift on the hard subset (questions
+   the base model fails), not the near-ceiling full dev set. Risk: looks like goalpost-moving
+   unless full-dev recall stays the headline and hard-subset is clearly diagnostic.
+2. **Hyperparameter sweep** (epochs/lr/negatives) on train_400 — uncertain payoff given the
+   consistent within-noise trend.
+3. **Accept & write up the negative finding** — "on the HotpotQA slice the baseline is too
+   strong (0.94) to show fine-tune lift; thesis needs the harder target-state corpus (BRIGHT)."
+4. **Diagnose the mechanism** — instrument which dev questions flip hit→miss after fine-tune.
+
+My recommendation: (3) + (4) — record the honest negative finding and diagnose, rather than
+re-targeting to manufacture a win. Do NOT spend the holdout (`eval-final`): there's no
+candidate worth measuring.
+
+**Open questions / decisions pending**
+
+- Is HotpotQA the wrong vehicle for the thesis entirely? The slice plan picks it for speed,
+  but its retrieval ceiling may make the research result undemonstrable until BRIGHT lands.
+- Stale `mining` job `0119ab03c23c` (run 3) still in DB — harmless, but could be marked
+  `archived` for hygiene.
+
+**Gotchas hit**
+
+- **All canary deltas so far are within noise.** Don't report any single run's delta as a
+  result without checking CI overlap. With 100 dev questions, 1 question = 0.01 recall.
+- **Run 3's all-or-nothing mining kill**: see ISSUES.md. 1000-q split exceeds session lifetime.
+- Otherwise same gotchas as the 07:36 entry below (alias rollback, LiteLLM TimeoutError noise).
+
+---
+
 ## 2026-06-13 07:36 UTC — Claude Code → next session
 
 **Last commit:** `0fdea62` on `claude/eloquent-clarke-qiha1x`

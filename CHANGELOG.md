@@ -1,5 +1,26 @@
 ## Unreleased
 
+- **Fine-tune lift on the HotpotQA dev set is not statistically detectable (3-run summary).**
+  After fixing the corpus mismatch (run 2) and the stale-alias bug (run 4 — the first
+  fully valid before/after), the canary recall@10 deltas across all completed runs are:
+  - Run 1 (train 150, confounded corpus): 291 triplets, 0.960 → 0.935, Δ −0.025
+  - Run 2 (train 150): 19 triplets, 0.940 → 0.950, Δ +0.010 (promoted, then rolled back)
+  - Run 4 (train 400, clean): 62 triplets, 0.940 → 0.925, Δ −0.015 (archived)
+  All three deltas fall inside heavily overlapping 95% CIs (e.g. run 4: before [0.905, 0.970]
+  vs after [0.885, 0.960]). **No run shows a statistically significant effect in either
+  direction.** Root cause: the base retriever already scores 0.94–0.96 recall@10 on the dev
+  set — there is essentially no headroom for mined-failure fine-tuning to demonstrate a
+  measurable lift. Run 2's "promotion" was within noise (a coin-flip), not a real improvement.
+  The thesis (mined-failure fine-tuning beats a strong baseline) needs a canary with actual
+  headroom to be testable — likely the harder target-state corpus (BRIGHT), not HotpotQA.
+  `corpus.active` left on `corpus.base` (run 2's noise-level promotion was reverted).
+
+- **400-question train split runs to completion; 1000-question split does not.**
+  `hotpotqa_train_1000.jsonl` mining was killed at ~4.5 h (container session ceiling) with
+  zero failure_cases saved — `evaluate()` commits all-or-nothing at the end of the run. The
+  400-question split (qs 1–150 warm in LLM cache, 151–400 cold) mines in ~1 h and produced
+  62 failures. See ISSUES.md for the incremental-persistence follow-up.
+
 - **First promoted fine-tune run (run 2) — clean apples-to-apples result.**
   Re-ran `helix.cli finetune` after rebuilding `corpus.base` from the full 15 568-chunk corpus
   so both arms searched identical-size indices. Results:
