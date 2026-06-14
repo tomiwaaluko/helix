@@ -40,7 +40,6 @@ from helix.rag.chunker import Chunk, TokenCounter, chunk_document
 from helix.rag.indexer import IndexResult, index_corpus
 from helix.rag.miner.miner import mine_failures, to_store_row
 from helix.rag.promotion.promote import (
-    ACTIVE_ALIAS,
     IndexFn,
     PromoteConfig,
     RetrieveFn,
@@ -166,7 +165,7 @@ def _build_promotion_backends(
     )
 
     async def _retrieve(query: str, collection: str, k: int) -> list[str]:
-        retriever = base_retriever if collection == ACTIVE_ALIAS else candidate_retriever
+        retriever = candidate_retriever if collection == candidate_collection else base_retriever
         docs = await retriever.retrieve(query, top_k=k)
         # Doc-level, order-preserving dedup — matches how the workflow builds
         # Answer.metadata["retrieved_doc_ids"], so recall is measured identically.
