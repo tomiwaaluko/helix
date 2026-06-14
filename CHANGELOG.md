@@ -1,5 +1,13 @@
 ## Unreleased
 
+- **M1: Go orchestrator milestone landed.**
+  Proto contracts (`proto/helix/v1/`), Postgres schema (`migrations/202606150001_initial_schema.sql`),
+  Go orchestrator binary (`cmd/orchestrator/`) with gRPC (RegisterWorker, Heartbeat, CompleteTask, Checkpoint)
+  and REST (`/api/v1/runs`), NATS JetStream dispatch, Python `RemoteEngine`
+  (`worker/helix/runtime/remote_engine.py`), and worker entrypoint (`python -m helix.worker`).
+  `make eval` continues unchanged in local mode. `make test-integration` exercises the full stack.
+  `make dev` now boots Qdrant + Postgres + NATS.
+
 - **BRIGHT multi-seed replication (B4 seed=1, B5 seed=2): lift reproduces across all seeds.**
   B4: 0.2528 → 0.3436 (Δ +0.0908), promoted. B5: 0.2528 → 0.3433 (Δ +0.0905), promoted.
   Cross-seed delta spread: 0.003 pp. Paired 95% CIs all exclude zero (P(Δ≤0) ≤ 0.013).

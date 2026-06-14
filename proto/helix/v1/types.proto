@@ -1,0 +1,27 @@
+syntax = "proto3";
+package helix.v1;
+option go_package = "github.com/tomiwaaluko/helix/gen/go/helix/v1;helixv1";
+
+message TaskEnvelope {
+  string task_id          = 1;
+  string run_id           = 2;
+  string workflow_name    = 3;
+  int32  workflow_version = 4;
+  string node_id          = 5;
+  bytes  input_json       = 6;
+  int32  attempt_number   = 7;
+  string trace_id         = 8;
+  string deadline         = 9;
+  optional string replay_token = 10;
+}
+
+message TaskResult {
+  string task_id        = 1;
+  int32  attempt_number = 2;
+  string worker_id      = 3;
+  string status         = 4;
+  bytes  output_json    = 5;
+  optional string error = 6;
+  string span_id        = 7;
+  int32  duration_ms    = 8;
+}

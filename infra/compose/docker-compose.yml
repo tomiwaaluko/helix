@@ -1,14 +1,13 @@
-# Dev stack for the vertical slice. Qdrant is the only external dependency;
-# SQLite, the span JSONL, and the LLM cache are all on the local filesystem.
+# Dev stack for M1.
 #
-#   make dev        # boot Qdrant
-#   make dev-down   # tear it down (and drop the volume)
+#   make dev        # boot Qdrant + Postgres + NATS
+#   make dev-down   # tear it down and drop all volumes
 services:
   qdrant:
     image: qdrant/qdrant:v1.12.0
     ports:
-      - "6333:6333" # REST / what the client's default url targets
-      - "6334:6334" # gRPC
+      - "6333:6333"
+      - "6334:6334"
     volumes:
       - qdrant_storage:/qdrant/storage
     healthcheck:
@@ -17,5 +16,37 @@ services:
       timeout: 3s
       retries: 5
 
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: helix
+      POSTGRES_USER: helix
+      POSTGRES_PASSWORD: helix
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U helix -d helix"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  nats:
+    image: nats:2.10
+    command: ["--jetstream", "--store_dir=/data"]
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    volumes:
+      - nats_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8222/healthz || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
 volumes:
   qdrant_storage:
+  postgres_data:
+  nats_data:

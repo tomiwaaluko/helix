@@ -1,8 +1,9 @@
-.PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down seed-bright check-bright
+.PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down \
+        seed-bright check-bright proto build orchestrator worker test-integration
 
-# Boot Qdrant (the only external dependency for the slice)
+# Boot Qdrant + Postgres + NATS (M1 stack)
 dev:
-	docker compose -f infra/compose/docker-compose.yml up -d qdrant
+	docker compose -f infra/compose/docker-compose.yml up -d
 
 dev-down:
 	docker compose -f infra/compose/docker-compose.yml down -v
@@ -50,8 +51,44 @@ eval-final:
 	  --concurrency 4 \
 	  --output evals/baselines/hotpotqa_holdout_500_result.json
 
+# Regenerate protobuf stubs (Go + Python)
+proto:
+	protoc \
+	  -I proto \
+	  --go_out=gen/go --go_opt=paths=source_relative \
+	  --go-grpc_out=gen/go --go-grpc_opt=paths=source_relative \
+	  proto/helix/v1/types.proto proto/helix/v1/orchestrator.proto
+	cd worker && python3.12 -m grpc_tools.protoc \
+	  -I ../proto \
+	  --python_out=. \
+	  --grpc_python_out=. \
+	  ../proto/helix/v1/types.proto ../proto/helix/v1/orchestrator.proto
+
+# Build Go orchestrator binary
+build:
+	go build -o bin/orchestrator ./cmd/orchestrator/
+
+# Run orchestrator against local dev stack
+orchestrator: build
+	DATABASE_URL=postgres://helix:helix@localhost:5432/helix?sslmode=disable \
+	NATS_URL=nats://localhost:4222 \
+	HELIX_API_TOKEN=dev-token \
+	./bin/orchestrator
+
+# Run Python worker against local dev stack (remote mode)
+worker:
+	cd worker && python3.12 -m helix.worker \
+	  --orchestrator grpc://localhost:50051 \
+	  --nats nats://localhost:4222 \
+	  --pool research
+
 test:
-	cd worker && python3.12 -m pytest tests/ -x -q
+	cd worker && python3.12 -m pytest tests/ -x -q --ignore=tests/integration
+	go test ./cmd/... ./internal/... ./gen/... -count=1
+
+# End-to-end integration test (requires make dev running)
+test-integration:
+	cd worker && python3.12 -m pytest tests/integration/ -x -q -v
 
 # BRIGHT biology mini-experiment
 # Downloads BRIGHT, builds corpus (~10.5k docs) and BM25 index, indexes into Qdrant.
@@ -86,6 +123,8 @@ finetune-bright:
 lint:
 	PYTHONPATH=worker python3.12 scripts/check_holdout_integrity.py
 	cd worker && ruff check . && python3.12 -m mypy --strict helix/
+	golangci-lint run ./...
 
 fmt:
 	cd worker && ruff format . && ruff check --fix .
+	gofmt -w cmd/ internal/ gen/

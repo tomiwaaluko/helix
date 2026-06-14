@@ -5,10 +5,54 @@
 
 ---
 
-## 2026-06-14 — Claude Code → next session
+## 2026-06-14 — Claude Code → next session (M1)
 
-**Last commit:** `f710776` on `claude/eloquent-clarke-qiha1x`
-**Working tree:** dirty (B4/B5 artifacts + docs — being committed now)
+**Last commit:** (see `git log -1 --oneline` — M1 implementation commit)
+**Working tree:** clean after this commit
+
+**Task plan position:** M1 complete per `docs/m1-plan.md` checklist items 1–14. All code on disk, all gates passing.
+
+**What shipped this session**
+
+- **M1 Go orchestrator:**
+  - `proto/helix/v1/types.proto` + `orchestrator.proto` — signed off and committed
+  - `gen/go/helix/v1/` — Go stubs (protoc generated)
+  - `worker/helix/v1/` — Python stubs (grpc_tools generated)
+  - `migrations/202606150001_initial_schema.sql` — full 10-table Postgres schema
+  - `infra/compose/docker-compose.yml` — Qdrant + Postgres 15 + NATS 2.10
+  - `go.mod` + all deps (pgx/v5, golang-migrate, grpc, nats.go, chi, lib/pq)
+  - `internal/config/`, `internal/store/`, `internal/dispatch/`, `internal/grpc/`, `internal/api/`
+  - `cmd/orchestrator/main.go` — entry point, migration runner, gRPC + HTTP servers
+  - `worker/helix/runtime/remote_engine.py` — gRPC client + NATS consumer
+  - `worker/helix/worker/__main__.py` — `python -m helix.worker` entrypoint
+  - `worker/tests/integration/test_remote_engine.py` — skipped unless HELIX_INTEGRATION=1
+  - `AGENTS.md` updated: M0 bullets removed, M1 stack documented
+
+**Gates passing**
+- `make test`: 139 Python tests pass, Go compiles cleanly (no test files yet)
+- `ruff check .`: clean
+- `mypy --strict helix/`: 0 errors (generated v1 stubs excluded)
+- `golangci-lint run`: 0 issues
+- `go build -o bin/orchestrator ./cmd/orchestrator/`: succeeds
+
+**What's next (M2)**
+- OTel collector (Go binary `cmd/collector/`) writing spans to ClickHouse
+- Add ClickHouse to `docker-compose.yml`
+- Wire Python workers to emit OTel spans via the collector (replace JSONL logger)
+- Go table-driven unit tests for scheduler DAG logic, CompleteTask idempotency
+
+**Open questions / gotchas**
+- Integration test (`make test-integration`) requires `HELIX_INTEGRATION=1` + `make dev` running
+  + `make orchestrator` + `make worker` all in flight. Not yet exercised end-to-end in CI.
+- `bin/orchestrator` is gitignored (binary). Always run `make build` before `make orchestrator`.
+- Python proto stubs (`worker/helix/v1/*.py`) are generated; always regenerate with `make proto`
+  after changing `.proto` files, never edit by hand.
+- NATS durable consumer name is `worker-<pool>` — if the pool name changes, the consumer
+  name changes and old messages may not be consumed.
+
+---
+
+## 2026-06-14 — Claude Code → next session
 
 **Task plan position:** BRIGHT experiment complete. B3/B4/B5 all promoted; 3-run replication done. Thesis confirmed, reproducible, statistically defensible. Ready for M1 planning.
 

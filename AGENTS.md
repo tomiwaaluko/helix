@@ -6,23 +6,26 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: vertical slice (M0)
+## Current phase: M1 — Go orchestrator
 
-**The authoritative scope right now is `docs/vertical-slice-plan.md`.**
+**The authoritative scope right now is `docs/m1-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-We are building the Python single-process implementation of the research loop:
+M1 is the control plane. The stack on disk:
 
-- SQLite for state (no Postgres yet)
-- `asyncio.Queue` for dispatch (no NATS yet)
-- JSONL file for spans (no ClickHouse yet)
-- Qdrant for vectors (real, in Docker)
-- LiteLLM for model calls (real, with disk-backed response cache)
+- **Postgres 15** for run/task/worker state (`migrations/202606150001_initial_schema.sql`)
+- **NATS JetStream** for task dispatch (`helix.tasks.dispatch.<pool>`)
+- **Go orchestrator** (`cmd/orchestrator/`) — gRPC + REST server, migration runner
+- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer, runs workflows in local mode
+- **Proto contracts** (`proto/helix/v1/`) — stubs in `gen/go/helix/v1/` (Go) and `worker/helix/v1/` (Python)
+- **Qdrant** for vectors (same as M0)
+- **JSONL spans** (`data/spans.jsonl`) — OTel export deferred to M2
 
-The full production architecture described later in this document — Go orchestrator, NATS JetStream, ClickHouse, Postgres, gRPC, Next.js dashboard — is the **target state**, not what exists today. Treat any reference to those components in the rest of this file as future context.
+`make eval` continues to run in local mode (Python in-process). The orchestrator + worker path is exercised by `make test-integration`.
 
-When this section says "Go" or "Postgres" or "NATS" or "proto" or "Helm", you are reading about a system that does not yet exist on disk. The slice operates only in `worker/`, `evals/`, and `scripts/`. The Makefile targets that exist today are: `dev`, `dev-down`, `seed`, `eval`, `eval-full`, `eval-final`, `test-eval-smoke`, `test`, `lint`, `fmt`. Anything else in the commands table below is future state.
+What is NOT yet on disk (future milestones):
+- ClickHouse (M2), Redis (M3), MinIO (M3), Next.js dashboard (M4), failure miner as production workflow (M5), Helm/Kubernetes (M6).
 
-Update this section when the phase changes. When the Go orchestrator lands (M1), remove the SQLite/asyncio bullets and update the commands table; when the dashboard lands (M4), remove the Next.js notice; and so on. The doc tracks the system.
+Update this section when M2 lands (ClickHouse / OTel collector).
 
 ## What this repo is
 
@@ -41,7 +44,7 @@ cmd/
 
 worker/              Python: worker runtime, tool adapters, SDK decorators  [M0+]
   helix/             public SDK surface (`helix.workflow`, `helix.task`)
-  helix_proto/       generated gRPC stubs (do not edit by hand)             [M1+]
+  helix/v1/          generated gRPC stubs (do not edit by hand)             [M1+]
   tools/             LiteLLM adapter, Qdrant adapter, web search, sandbox
 
 rag/                 Python: indexer, retriever, reranker, miner, trainer   [M0+ partial]
