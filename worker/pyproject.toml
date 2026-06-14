@@ -24,6 +24,8 @@ dependencies = [
   "grpcio-tools>=1.60",
   "nats-py>=2.3",
   "protobuf>=4.25",
+  "opentelemetry-sdk>=1.25",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.25",
 ]
 
 [project.optional-dependencies]
@@ -81,8 +83,8 @@ module = ["helix.v1", "helix.v1.*"]
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = ["helix.runtime.remote_engine", "helix.worker.__main__"]
-# proto stubs are dynamically typed; attr-defined errors on pb2 objects are expected
+module = ["helix.runtime.remote_engine", "helix.worker.__main__", "helix.otel"]
+# proto stubs and opentelemetry lazy-imports are dynamically typed
 ignore_errors = true
 
 [tool.pytest.ini_options]

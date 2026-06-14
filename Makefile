@@ -1,5 +1,5 @@
 .PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down \
-        seed-bright check-bright proto build orchestrator worker test-integration
+        seed-bright check-bright proto build orchestrator collector worker test-integration
 
 # Boot Qdrant + Postgres + NATS (M1 stack)
 dev:
@@ -64,9 +64,10 @@ proto:
 	  --grpc_python_out=. \
 	  ../proto/helix/v1/types.proto ../proto/helix/v1/orchestrator.proto
 
-# Build Go orchestrator binary
+# Build Go binaries (orchestrator + collector)
 build:
 	go build -o bin/orchestrator ./cmd/orchestrator/
+	go build -o bin/collector ./cmd/collector/
 
 # Run orchestrator against local dev stack
 orchestrator: build
@@ -74,6 +75,12 @@ orchestrator: build
 	NATS_URL=nats://localhost:4222 \
 	HELIX_API_TOKEN=dev-token \
 	./bin/orchestrator
+
+# Run OTel collector against local dev stack
+collector: build
+	CLICKHOUSE_URL=clickhouse://helix:helix@localhost:9000/default \
+	OTLP_GRPC_PORT=4317 \
+	./bin/collector
 
 # Run Python worker against local dev stack (remote mode)
 worker:

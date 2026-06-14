@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-06-14 — Claude Code → next session (M2)
+
+**Last commit:** (see `git log -1 --oneline` after the M2 commit)
+**Working tree:** clean after this commit
+
+**Task plan position:** M2 complete per `docs/m2-plan.md` definition of done checklist.
+
+**What shipped this session**
+
+- **M2 ClickHouse + OTel collector:**
+  - `docs/m2-plan.md` — full plan document (signed off before implementation)
+  - `migrations/clickhouse/202606150001_initial_schema.sql` — 4 tables: `spans` (TTL 90d, async_insert=1), `llm_calls`, `retrievals`, `eval_events` (shell tables for M5)
+  - `infra/compose/docker-compose.yml` — added `clickhouse/clickhouse-server:24.3` service
+  - `go.mod` + `go.sum` — added `clickhouse-go/v2 v2.46.0` + `go.opentelemetry.io/proto/otlp v1.10.0`
+  - `internal/clickhouse/schema.go` — DDL strings + `RunDDL(ctx, conn)`
+  - `internal/clickhouse/writer.go` — `SpanRow` struct, `Open()`, `BatchWriter` (1000-row buffer, 200 ms flush, 500-row max batch)
+  - `internal/otlp/server.go` — `TraceServiceServer` translating OTLP ResourceSpans → `SpanRow`; uses `spanSink` interface for testability
+  - `cmd/collector/main.go` — entry point: CLICKHOUSE_URL + OTLP_GRPC_PORT env, DDL on startup, graceful shutdown
+  - `worker/helix/otel.py` — `configure_otel()` (no-op if endpoint falsy) + `OtelSpanExporter` context manager
+  - `worker/pyproject.toml` — added `opentelemetry-sdk>=1.25`, `opentelemetry-exporter-otlp-proto-grpc>=1.25`
+  - `Makefile` — `make build` now also builds `bin/collector`; added `make collector` target
+  - Unit tests: `internal/clickhouse/writer_test.go` (DDL strings + buffer drop), `internal/otlp/server_test.go` (4 proto-translation tests), `worker/tests/test_otel.py` (9 tests: no-op + configure + span lifecycle)
+  - `AGENTS.md` updated: M1 section → M2 section
+  - `CHANGELOG.md` updated: M2 entry added
+
+**Gates passing**
+- `make test`: 148 Python tests pass, all Go tests pass (internal/clickhouse, internal/otlp, internal/grpc, internal/api)
+- `ruff check .` + `mypy --strict helix/`: clean
+- `golangci-lint run ./cmd/... ./internal/... ./gen/...`: 0 issues
+- `go build ./cmd/collector/ ./internal/clickhouse/... ./internal/otlp/...`: succeeds
+
+**What's next (M3)**
+- Redis (rate limits, task locks, exactly-once helpers)
+- MinIO (blob storage for checkpoints and prompts)
+- `make dev` gains Redis + MinIO services
+- Worker SDK: `@helix.task` exactly-once helper using Redis sentinel
+
+**Open questions / gotchas**
+- `make test-integration` for M2 requires `HELIX_INTEGRATION=1` + `make dev` (ClickHouse must be running). Not exercised in this session (no Docker daemon).
+- `OtelSpanExporter` lazy-imports opentelemetry inside each method call — performance is fine for span-level overhead but if hot-path spans become a concern, cache the tracer at configure time.
+- The `spanSink` interface in `internal/otlp/server.go` is unexported. If another package needs to inject a custom sink, it will need exporting. Not needed until M5.
+- `bin/collector` is gitignored (binary). Always run `make build` before `make collector`.
+
+---
+
 ## 2026-06-14 — Claude Code → next session (M1)
 
 **Last commit:** (see `git log -1 --oneline` — M1 implementation commit)

@@ -46,7 +46,21 @@ services:
       timeout: 3s
       retries: 5
 
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.3
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD-SHELL", "clickhouse-client --query 'SELECT 1'"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   qdrant_storage:
   postgres_data:
   nats_data:
+  clickhouse_data:

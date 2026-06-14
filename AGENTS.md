@@ -6,26 +6,30 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: M1 — Go orchestrator
+## Current phase: M2 — ClickHouse + OTel collector
 
-**The authoritative scope right now is `docs/m1-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
+**The authoritative scope is `docs/m2-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-M1 is the control plane. The stack on disk:
+M2 adds observability infrastructure on top of the M1 control plane. The full stack on disk:
 
 - **Postgres 15** for run/task/worker state (`migrations/202606150001_initial_schema.sql`)
 - **NATS JetStream** for task dispatch (`helix.tasks.dispatch.<pool>`)
+- **ClickHouse 24** for spans + shell tables (`migrations/clickhouse/202606150001_initial_schema.sql`)
 - **Go orchestrator** (`cmd/orchestrator/`) — gRPC + REST server, migration runner
-- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer, runs workflows in local mode
+- **Go collector** (`cmd/collector/`) — OTLP/gRPC receiver → ClickHouse BatchWriter
+- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer
 - **Proto contracts** (`proto/helix/v1/`) — stubs in `gen/go/helix/v1/` (Go) and `worker/helix/v1/` (Python)
-- **Qdrant** for vectors (same as M0)
-- **JSONL spans** (`data/spans.jsonl`) — OTel export deferred to M2
+- **Qdrant** for vectors
+- **JSONL spans** (`data/spans.jsonl`) — still written; OTel is additive (dual-write)
+- **OTel integration** (`worker/helix/otel.py`) — no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` unset
 
-`make eval` continues to run in local mode (Python in-process). The orchestrator + worker path is exercised by `make test-integration`.
+`make eval` continues to run in local mode (Python in-process). `make dev` boots Qdrant + Postgres + NATS + ClickHouse. `make collector` runs the OTel collector against the local stack.
 
 What is NOT yet on disk (future milestones):
-- ClickHouse (M2), Redis (M3), MinIO (M3), Next.js dashboard (M4), failure miner as production workflow (M5), Helm/Kubernetes (M6).
+- `llm_calls`, `retrievals`, `eval_events` ClickHouse tables are created as empty shells; mining lands in M5.
+- Redis (M3), MinIO (M3), Next.js dashboard (M4), failure miner as production workflow (M5), Helm/Kubernetes (M6).
 
-Update this section when M2 lands (ClickHouse / OTel collector).
+Update this section when M3 lands (Redis + MinIO).
 
 ## What this repo is
 

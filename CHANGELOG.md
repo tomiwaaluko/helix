@@ -1,5 +1,15 @@
 ## Unreleased
 
+- **M2: ClickHouse + OTel collector milestone landed.**
+  ClickHouse 24 added to `docker-compose.yml`. Schema in `migrations/clickhouse/202606150001_initial_schema.sql`
+  (`spans` with 90-day TTL + async inserts; shell tables `llm_calls`, `retrievals`, `eval_events` for M5).
+  New Go binary `cmd/collector/`: OTLP/gRPC receiver → `internal/clickhouse.BatchWriter` (200 ms flush,
+  500-row batches). New `worker/helix/otel.py`: `OtelSpanExporter` + `configure_otel()` — no-op when
+  `OTEL_EXPORTER_OTLP_ENDPOINT` unset, dual-write alongside JSONL when set.
+  `make build` now produces `bin/orchestrator` **and** `bin/collector`. `make collector` runs the collector.
+  Unit tests: `internal/clickhouse/writer_test.go` (DDL + buffer), `internal/otlp/server_test.go`
+  (proto translation), `worker/tests/test_otel.py` (no-op + configure path).
+
 - **M1: Go orchestrator milestone landed.**
   Proto contracts (`proto/helix/v1/`), Postgres schema (`migrations/202606150001_initial_schema.sql`),
   Go orchestrator binary (`cmd/orchestrator/`) with gRPC (RegisterWorker, Heartbeat, CompleteTask, Checkpoint)
