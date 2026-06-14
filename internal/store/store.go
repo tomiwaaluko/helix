@@ -32,27 +32,27 @@ const (
 
 // Run represents a single workflow execution.
 type Run struct {
-	ID          string
-	WorkflowID  string
-	Status      RunStatus
-	Input       []byte // JSONB
-	Output      []byte // nullable
-	Error       []byte // nullable
-	SubmittedAt time.Time
-	SubmittedBy string
-	TraceID     string
-	TaskIDs     []string // populated by GetRun
+	ID          string    `json:"id"`
+	WorkflowID  string    `json:"workflow_id"`
+	Status      RunStatus `json:"status"`
+	Input       []byte    `json:"input,omitempty"`
+	Output      []byte    `json:"output,omitempty"`
+	Error       []byte    `json:"error,omitempty"`
+	SubmittedAt time.Time `json:"submitted_at"`
+	SubmittedBy string    `json:"submitted_by"`
+	TraceID     string    `json:"trace_id"`
+	TaskIDs     []string  `json:"task_ids,omitempty"`
 }
 
 // Task represents a unit of work within a run.
 type Task struct {
-	ID       string
-	RunID    string
-	NodeID   string
-	Status   TaskStatus
-	Input    []byte
-	Output   []byte
-	Attempts int
+	ID       string     `json:"id"`
+	RunID    string     `json:"run_id"`
+	NodeID   string     `json:"node_id"`
+	Status   TaskStatus `json:"status"`
+	Input    []byte     `json:"input,omitempty"`
+	Output   []byte     `json:"output,omitempty"`
+	Attempts int        `json:"attempts"`
 }
 
 // Worker represents a registered worker process.

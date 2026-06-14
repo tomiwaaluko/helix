@@ -19,13 +19,13 @@ import (
 // Handler holds the dependencies for the REST API.
 type Handler struct {
 	store    store.Store
-	nats     *dispatch.Client
+	nats     dispatch.Publisher
 	logger   *slog.Logger
 	apiToken string
 }
 
 // NewHandler constructs a Handler with the given dependencies.
-func NewHandler(s store.Store, d *dispatch.Client, log *slog.Logger, token string) *Handler {
+func NewHandler(s store.Store, d dispatch.Publisher, log *slog.Logger, token string) *Handler {
 	return &Handler{
 		store:    s,
 		nats:     d,

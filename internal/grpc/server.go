@@ -20,15 +20,15 @@ type Server struct {
 	helixv1.UnimplementedOrchestratorServer
 
 	store  store.Store
-	nats   *dispatch.Client
 	logger *slog.Logger
 }
 
 // NewServer returns a new Server backed by the given store and dispatch client.
-func NewServer(s store.Store, d *dispatch.Client, log *slog.Logger) *Server {
+// The dispatch client is accepted for future use (e.g. pushing completions back
+// to NATS) but is not used by the gRPC layer in M1.
+func NewServer(s store.Store, _ dispatch.Publisher, log *slog.Logger) *Server {
 	return &Server{
 		store:  s,
-		nats:   d,
 		logger: log,
 	}
 }

@@ -11,6 +11,11 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Publisher is the minimal interface the API layer needs from the dispatcher.
+type Publisher interface {
+	PublishTaskEnvelope(ctx context.Context, pool string, env *helixv1.TaskEnvelope) error
+}
+
 const (
 	streamName      = "HELIX_TASKS"
 	streamSubjects  = "helix.tasks.dispatch.*"
