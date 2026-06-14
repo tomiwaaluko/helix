@@ -969,11 +969,37 @@ Fix: changed dispatch to `collection == candidate_collection`. Commit `d410252`.
 - Training: 3 epochs, train_loss = 0.7066
 - **Canary recall@10: 0.2528 → 0.3413  (Δ = +0.0886)  → PROMOTED**
 
-**Conclusion: thesis confirmed on hard data.** A single fine-tune round on 92 mined BRIGHT
-biology failures lifts HybridRetriever recall@10 by **+8.86 pp** on 51 held-out stratified
-questions (0% training-set overlap). The improvement is substantial (35% relative gain over
-base recall 0.2528) and unconfounded: both arms use the same BM25 index and reranker; the
-only variable is the fine-tuned dense embedder and its corresponding Qdrant collection.
+**Phase 5 — Paired significance test (B3 hardening, 2026-06-14):**
+
+The canary reports only independent per-arm bootstrap CIs — a single +0.0886 run could in
+principle be a few lucky questions. `scripts/analyze_canary_flips.py` re-runs the *identical*
+hybrid retrieval (mirrors `_build_promotion_backends`) over the 51 canary questions, scores
+both arms per question, and computes a **paired** test on the deltas. Result reconciles exactly
+with the canary (0.2528 → 0.3413) and adds:
+
+| Statistic | Value |
+|---|---|
+| Mean paired delta | **+0.0886** |
+| Paired bootstrap 95% CI | **[+0.0111, +0.1716]** (excludes 0) |
+| Bootstrap P(Δ ≤ 0) | 0.012 |
+| Sign-test p (2-sided) | 0.041 |
+| Improved / regressed / unchanged | 15 / 5 / 31 |
+| Miss→Hit / Hit→Miss | 7 / 3 |
+
+Both the paired bootstrap CI and the exact sign test reject the null at α=0.05. The margin is
+modest (CI lower bound +0.011) but real. Critically, **improvements dominate regressions 15:5** —
+the inverse of the net-negative HotpotQA pattern (where the same fine-tune mechanism produced
+6 regressions vs 3 improvements). The 5 BRIGHT regressions show the familiar partial-recall
+trade-off, but on harder data the signal clears the noise. Artifact:
+`evals/baselines/bright_b3_canary_flips.json`.
+
+**Conclusion: thesis confirmed on hard data, and the result is statistically defensible.**
+A single fine-tune round on 92 mined BRIGHT biology failures lifts HybridRetriever recall@10 by
+**+8.86 pp** on 51 held-out stratified questions (0% training-set overlap; 35% relative gain over
+base recall 0.2528). The lift is unconfounded — both arms share the BM25 index and reranker; only
+the dense embedder and its Qdrant collection differ — and survives a paired significance test.
+Open follow-up: a multi-seed replication would tighten the CI further (currently n=1 fine-tune,
+n=51 canary), but the negative HotpotQA finding is now decisively overturned on harder ground.
 
 ### Per-question flip analysis (run 4 vs base)
 

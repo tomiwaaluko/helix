@@ -1,5 +1,13 @@
 ## Unreleased
 
+- **BRIGHT-B3 hardened: paired significance test confirms the +0.0886 lift is real.**
+  New `scripts/analyze_canary_flips.py` re-runs the canary's exact hybrid retrieval per question
+  and computes a paired test the canary omitted. Reconciles to 0.2528 → 0.3413 and adds:
+  paired bootstrap 95% CI [+0.0111, +0.1716] (excludes 0), bootstrap P(Δ≤0)=0.012, sign-test
+  p=0.041; 15 improved / 5 regressed / 31 unchanged (7 Miss→Hit vs 3 Hit→Miss). Improvements
+  dominate regressions 15:5 — inverse of the net-negative HotpotQA pattern. Result artifact:
+  `evals/baselines/bright_b3_canary_flips.json`.
+
 - **BRIGHT-B3: thesis confirmed. Fine-tune lifts recall@10 by +8.86 pp on hard held-out data.**
   First valid BRIGHT biology canary measurement (stratified 52/51 split, fixed dispatch bug).
   92 failures mined from 52 training questions → 92 triplets → 3-epoch fine-tune (loss 0.7066).

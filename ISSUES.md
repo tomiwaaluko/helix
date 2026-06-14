@@ -291,6 +291,29 @@
 - **Watch for:** a promoted candidate that does not lift `make eval` recall — could mean the
   retriever improved but the workflow is the bottleneck.
 
+### Fine-tune checkpoint path is CWD-relative while --qdrant-path is a flag — artifacts split across trees
+
+- **Date / session:** 2026-06-14, Claude Code
+- **Symptom:** After BRIGHT-B3 promoted with `checkpoint: data/models/fd2aeba7...`, that directory
+  did not exist under the repo root `data/models/`. The candidate Qdrant collection
+  `corpus.candidate.fd2aeba7...` *was* present under root `data/qdrant/`. Looked like the promotion
+  had deleted the checkpoint (which would be a serious bug — a promoted embedder with no weights
+  cannot embed queries at serve time).
+- **Root cause:** No deletion. `_finetune` computes `output_dir = Path(models_dir) / job_id` where
+  `models_dir` defaults to a **CWD-relative** `data/models`. B3 was launched from `worker/`
+  (`cd worker && python -m helix.cli finetune ... --qdrant-path ../data/qdrant`), so the checkpoint
+  landed in `worker/data/models/fd2aeba7...` while Qdrant writes went to the flagged
+  `../data/qdrant` (root). The two artifact trees diverged because `--qdrant-path` is a CLI flag but
+  the models dir is only positionally CWD-relative.
+- **Fix / workaround:** Run `finetune` from the repo root, or pass an absolute `--models-dir`. The B3
+  checkpoint is intact at `worker/data/models/fd2aeba7a8af4ff3a83f78430ed90ec3`; the flip-analysis
+  script points `--checkpoint` there explicitly.
+- **Guard:** none yet. A real fix: make `promote_candidate`/`_finetune` resolve `models_dir` relative
+  to the same root as `--qdrant-path` (or require both absolute), and have promotion assert the
+  checkpoint dir exists before recording `artifact_uri`.
+- **Watch for:** a promoted/archived job whose `artifact_uri` path is missing under the root — check
+  the launch CWD and `worker/data/models/` before assuming the checkpoint was deleted.
+
 ### Canary dispatch routed both arms to candidate retriever when promotion-alias ≠ "corpus.active"
 
 - **Date / session:** 2026-06-14, Claude Code

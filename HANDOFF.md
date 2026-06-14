@@ -7,12 +7,26 @@
 
 ## 2026-06-14 — Claude Code → next session
 
-**Last commit:** `4732898` on `claude/eloquent-clarke-qiha1x`
-**Working tree:** dirty (CHANGELOG.md, docs/vertical-slice-plan.md — being committed now)
+**Last commit:** `936d210` on `claude/eloquent-clarke-qiha1x` (history rewritten to Tomiwa Aluko authorship)
+**Working tree:** dirty (scripts/analyze_canary_flips.py, evals/baselines/bright_b3_canary_flips.json,
+  CHANGELOG.md, docs/vertical-slice-plan.md, ISSUES.md, HANDOFF.md — being committed now)
 
-**Task plan position:** BRIGHT-B3 complete. Thesis confirmed on hard data.
+**Task plan position:** BRIGHT-B3 complete + hardened. Thesis confirmed and statistically defensible.
+
+**Note on git authorship:** all commits in this branch were rewritten (filter-branch + force-push)
+to author `Tomiwa Aluko <tomiwaaluko02@gmail.com>`, and global git config is set so all future
+commits use that identity. Do not switch back to the Claude/noreply identity.
 
 **What shipped this session**
+
+- **BRIGHT-B3 hardened with a paired significance test.**
+  - `scripts/analyze_canary_flips.py`: re-runs the canary's exact hybrid retrieval per question
+    (mirrors `_build_promotion_backends`), no LLM, deterministic. Parameterized for any promotion.
+  - Reconciles to the canary exactly (0.2528 → 0.3413, Δ +0.0886) and adds the paired test the
+    canary omits: **95% CI [+0.0111, +0.1716] (excludes 0)**, bootstrap P(Δ≤0)=0.012, sign-test
+    p=0.041; **15 improved / 5 regressed / 31 unchanged** (7 Miss→Hit vs 3 Hit→Miss).
+  - Improvements dominate regressions 15:5 — inverse of HotpotQA's net-negative 3:6 pattern.
+  - Artifact committed at `evals/baselines/bright_b3_canary_flips.json`.
 
 - **BRIGHT-B3: first valid fine-tune measurement on BRIGHT biology.**
   - 52-question stratified train split (mean base recall 0.2615)
@@ -20,6 +34,8 @@
   - 92 failures mined → 92 triplets → 3 epochs, train_loss 0.7066
   - **recall@10: 0.2528 → 0.3413 (Δ +0.0886) → PROMOTED to `corpus.bright.active`**
   - 35% relative improvement, 51 held-out questions with 0% training-set overlap
+  - B3 checkpoint lives at `worker/data/models/fd2aeba7a8af4ff3a83f78430ed90ec3` (ran from
+    `worker/`; models dir is CWD-relative — see new ISSUES.md entry).
 
 - **Canary dispatch bug fixed (commit `d410252`).**
   `_build_promotion_backends._retrieve()` hardcoded `ACTIVE_ALIAS = "corpus.active"`.
@@ -39,15 +55,19 @@
 
 **What's next**
 
-1. **M1 planning** — thesis validated. The embedding fine-tune loop measurably improves
-   recall on harder data. Now scope the Go orchestrator milestone (M1):
+1. **M1 planning** — thesis validated *and* hardened. The embedding fine-tune loop measurably
+   improves recall on harder data with a paired CI that excludes zero. Now scope the Go
+   orchestrator milestone (M1):
    - Define proto contracts (`proto/helix/v1/`)
    - Scope the control-plane/worker split
    - Write the M1 plan doc before any implementation
-2. **Optional: run `make eval`** on the promoted BRIGHT model (with `corpus.bright.active`
-   active) to measure end-to-end workflow recall delta on BRIGHT biology questions, confirming
-   retriever lift propagates through the LLM decomposition layer.
-3. **Do NOT run `make eval-final`** — holdout is for the final promoted HotpotQA model,
+2. **Optional robustness: multi-seed B3 replication.** The CI lower bound (+0.011) is modest;
+   2–3 fine-tunes with different seeds/splits would tighten it and rule out single-run luck.
+   Each run is ~15–20 min. Reuse `scripts/analyze_canary_flips.py` for each.
+3. **Optional: run `make eval`** on the promoted BRIGHT model (with `corpus.bright.active`
+   active) to measure end-to-end workflow recall delta, confirming retriever lift propagates
+   through the LLM decomposition layer (the known HotpotQA bottleneck).
+4. **Do NOT run `make eval-final`** — holdout is for the final promoted HotpotQA model,
    which requires finishing M0 HotpotQA work first (or starting M1).
 
 **Open questions / decisions pending**
@@ -55,6 +75,8 @@
 - BRIGHT-B3 is promoted to `corpus.bright.active` — the HotpotQA `corpus.active` alias is
   unchanged. Any future HotpotQA finetune still has the ceiling problem (base recall 0.94).
 - Whether to keep BRIGHT as an ongoing benchmark through M1+ or treat it as M0-only validation.
+- Whether to do the multi-seed replication now (more confidence) or proceed to M1 on the
+  single hardened run (the maintainer's call — the result already clears α=0.05).
 
 **Gotchas hit**
 
@@ -64,13 +86,20 @@
   collection/alias pair should be tested with a quick 1-question canary first.
 - B2 had the correct stratified split but still measured Δ=0 (dispatch bug). Don't confuse
   "correct split" with "valid measurement" — the dispatch path must also be verified.
+- The B3 checkpoint appeared "missing" from `data/models/` — it was in `worker/data/models/`
+  because the run was launched from `worker/` and the models dir is CWD-relative (unlike the
+  flagged `--qdrant-path`). New ISSUES.md entry covers this.
 
 ```
 $ git log -1 --oneline
-4732898 docs(issues): log canary dispatch bug (ACTIVE_ALIAS hardcode → Δ=0 on BRIGHT)
+936d210 docs: record BRIGHT-B3 result — recall@10 +0.0886, thesis confirmed
 $ git status
-M CHANGELOG.md
-M docs/vertical-slice-plan.md
+?? scripts/analyze_canary_flips.py
+?? evals/baselines/bright_b3_canary_flips.json
+ M CHANGELOG.md
+ M HANDOFF.md
+ M ISSUES.md
+ M docs/vertical-slice-plan.md
 ```
 
 ---
