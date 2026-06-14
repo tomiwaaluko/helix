@@ -1,5 +1,19 @@
 ## Unreleased
 
+- **M3: Redis + MinIO milestone landed.**
+  Redis 7 and MinIO added to `docker-compose.yml` (MinIO API remapped to host 9100 to avoid
+  ClickHouse's 9000). Redis: an exactly-once sentinel keyed on `(task_id, attempt)` wired into
+  `RemoteEngine` (`worker/helix/runtime/idempotency.py`), the public `helix.exactly_once(...)`
+  helper, and a distributed token-bucket LLM rate limiter (`worker/helix/tools/rate_limit.py`).
+  MinIO: a `BlobStore` (`worker/helix/tools/blob.py`) implementing the
+  `s3://helix-blobs/<y>/<m>/<d>/<span_id>.bin` scheme with bucket bootstrap, presigned URLs,
+  and a `maybe_offload` helper that pushes >32 KB span payloads (`prompt_uri`/`completion_uri`)
+  off-span — wired into the LLM adapter behind `HELIX_SPAN_PAYLOADS` (default off). All three are
+  no-ops when `REDIS_URL`/`S3_ENDPOINT` are unset; `make eval` and determinism are unchanged.
+  `make dev` now boots Redis + MinIO; new unit tests for the sentinel, blob store, and limiter.
+  Made the `redis` import lazy across worker modules so `import helix` stays free of redis's
+  transitive OpenTelemetry pull (see ISSUES.md); hardened `test_otel.py` accordingly.
+
 - **M2: ClickHouse + OTel collector milestone landed.**
   ClickHouse 24 added to `docker-compose.yml`. Schema in `migrations/clickhouse/202606150001_initial_schema.sql`
   (`spans` with 90-day TTL + async inserts; shell tables `llm_calls`, `retrievals`, `eval_events` for M5).

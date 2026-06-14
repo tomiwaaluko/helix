@@ -5,6 +5,47 @@
 
 ---
 
+## 2026-06-14 — Claude Code → next session (M3)
+
+**Last commit:** (see `git log -1 --oneline` after the M3 commit)
+**Working tree:** clean after this commit
+
+**Task plan position:** M3 complete per `docs/m3-plan.md` definition of done (Full M3 scope, maintainer-approved).
+
+**What shipped this session**
+
+- **M3 Redis + MinIO (worker + infra slice; no Go changes):**
+  - `docs/m3-plan.md` — plan, approved at Full M3 scope
+  - `infra/compose/docker-compose.yml` — added `redis:7` + `minio` (API host **9100**, console 9101, `minio_data` volume)
+  - `worker/helix/tools/redis_conn.py` — `get_redis(url) -> Redis | None` (lazy redis import)
+  - `worker/helix/runtime/idempotency.py` — `Idempotency` sentinel (`SET NX PX` on `(task_id, attempt)`) + public `configure_redis` / `exactly_once`
+  - `worker/helix/tools/blob.py` — `BlobStore` (boto3 + `asyncio.to_thread`), `ensure_buckets`, `presign_get`, `maybe_offload` (32 KB threshold)
+  - `worker/helix/tools/rate_limit.py` — `RedisRateLimiter` token bucket (atomic Lua)
+  - Wired: sentinel into `RemoteEngine._handle_envelope`; rate limiter + gated payload offload into `litellm_adapter.llm_call`; both threaded through `ResearchDeps`; config built from env in `worker/__main__.py` (`REDIS_URL`, `S3_*`, `HELIX_SPAN_PAYLOADS`, `HELIX_LLM_RPM`)
+  - `helix.exactly_once` exported from `worker/helix/__init__.py`
+  - `worker/pyproject.toml` — `redis>=5`, `boto3>=1.34`, mypy boto3 override
+  - Tests: `test_idempotency.py`, `test_blob.py`, `test_rate_limit.py`, `tests/integration/test_m3.py` (skipped unless `HELIX_INTEGRATION`)
+  - Hardened `tests/test_otel.py` (real-target patching) — see gotcha below
+  - `AGENTS.md` (M2→M3), `CHANGELOG.md`, `ISSUES.md` (2 entries) updated
+
+**Gates passing**
+- `make test`: 169 Python tests pass; Go tests pass (clickhouse, otlp, grpc, api)
+- `ruff check .` + `mypy --strict helix/`: clean (43 files)
+- `golangci-lint run ./...`: 0 issues
+
+**What's next (M4)**
+- Next.js 14 dashboard (runs, traces, evals)
+- Go orchestrator MinIO wiring: `/api/v1/runs/{run_id}/trace` returns signed MinIO URLs (the `BlobStore` primitive M3 shipped)
+- REST dataset upload (`POST /api/v1/datasets` → `s3://helix-datasets`)
+
+**Open questions / gotchas**
+- **`redis` (8.x) transitively imports all of OpenTelemetry.** That broke `test_otel.py`'s `sys.modules` mocking once redis was installed (latent on the M2 baseline too — reproduced by stashing M3). Fix: redis imports are now lazy (`TYPE_CHECKING` + in-function) across `idempotency/rate_limit/redis_conn/remote_engine`, and `test_otel.py` patches real opentelemetry targets. Full detail in `ISSUES.md`.
+- **MinIO API is on host 9100, not 9000** (ClickHouse owns 9000). `S3_ENDPOINT` defaults to `http://localhost:9100`. boto3 uses path-style addressing for MinIO (`S3_ADDRESSING_STYLE=path`).
+- **Span-payload offload is OFF by default** (`HELIX_SPAN_PAYLOADS` unset) — preserves the "no prompts in spans" posture and eval determinism. Blob object key is a per-payload unique id (not necessarily equal to the span_id) when enabled.
+- M3 integration test needs `HELIX_INTEGRATION=1` + `make dev` + `REDIS_URL` + `S3_ENDPOINT`. Not run this session (no Docker daemon).
+
+---
+
 ## 2026-06-14 — Claude Code → next session (M2)
 
 **Last commit:** (see `git log -1 --oneline` after the M2 commit)

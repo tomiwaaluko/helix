@@ -49,6 +49,41 @@
 
 ## Environment & tooling
 
+### `redis` dependency transitively imports OpenTelemetry → broke OTel unit tests
+
+- **Date / session:** 2026-06-14, Claude Code (M3)
+- **Symptom:** After adding `redis` (M3), `tests/test_otel.py` failed 3 tests in the full
+  suite (`test_configure_otel_idempotent`, `test_span_exporter_calls_*`, `*_sets_error_*`)
+  while passing in isolation. Failure: mocked `set_tracer_provider` had `call_count == 0`.
+- **Root cause:** `redis.asyncio` (redis 8.x) eagerly imports all of OpenTelemetry. Once
+  `litellm` (exercised by `test_cli`) finds `redis` installed it imports it, so by the time
+  `test_otel` ran, `opentelemetry.trace` was genuinely imported. Those tests faked
+  opentelemetry via `patch.dict(sys.modules, ...)`, but `from opentelemetry import trace`
+  binds the *real* already-imported submodule, bypassing the fake. Confirmed pre-existing:
+  the same failure reproduces on the M2 baseline once `redis` is installed.
+- **Fix:** (1) `test_otel.py` now patches the real fully-qualified targets
+  (`opentelemetry.trace.set_tracer_provider`, `...TracerProvider`, etc.) instead of swapping
+  `sys.modules` — robust to import order, and mocking `set_tracer_provider` avoids mutating
+  the process-global provider. (2) Made the `redis` import lazy (`TYPE_CHECKING` + in-function
+  import) in `idempotency.py`, `rate_limit.py`, `redis_conn.py`, `remote_engine.py` so
+  `import helix` and importing `deep_research` stay lightweight and free of the OTel pull.
+- **Guard:** `make test` (full suite) now green; the real-target patching no longer depends
+  on opentelemetry being unimported.
+- **Watch for:** any new mock that fakes a third-party module via `sys.modules` for a package
+  that other deps import for real — patch the real attribute instead.
+
+### MinIO API port collides with ClickHouse on host 9000
+
+- **Date / session:** 2026-06-14, Claude Code (M3)
+- **Symptom:** Adding MinIO to `docker-compose.yml` with the default API port would clash —
+  ClickHouse (M2) already publishes host `9000` for its native protocol.
+- **Root cause:** Both ClickHouse native and MinIO S3 API default to container port 9000;
+  publishing both to host 9000 fails.
+- **Fix:** MinIO's API is published on host `9100` (console `9101`) in
+  `infra/compose/docker-compose.yml`; `S3_ENDPOINT` defaults to `http://localhost:9100`.
+- **Guard:** none (compose config). Documented in the compose header and `docs/m3-plan.md`.
+- **Watch for:** `S3_ENDPOINT` pointing at 9000 → connection refused / ClickHouse responses.
+
 ### `sqlite3` CLI is not installed
 
 - **Date / session:** 2026-06-12, Claude Code

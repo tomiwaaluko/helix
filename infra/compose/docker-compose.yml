@@ -1,7 +1,11 @@
-# Dev stack for M1.
+# Dev stack for M3.
 #
-#   make dev        # boot Qdrant + Postgres + NATS
+#   make dev        # boot Qdrant + Postgres + NATS + ClickHouse + Redis + MinIO
 #   make dev-down   # tear it down and drop all volumes
+#
+# Port note: ClickHouse binds host 9000 (native protocol). MinIO's API default is
+# also 9000, so MinIO's API is remapped to host 9100 (console 9101) to avoid the
+# collision. S3_ENDPOINT therefore defaults to http://localhost:9100.
 services:
   qdrant:
     image: qdrant/qdrant:v1.12.0
@@ -59,8 +63,36 @@ services:
       timeout: 3s
       retries: 10
 
+  redis:
+    image: redis:7
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: minio/minio:RELEASE.2024-06-13T22-53-53Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: helix
+      MINIO_ROOT_PASSWORD: helixhelix # MinIO requires >= 8 chars
+    ports:
+      - "9100:9000" # API  — host 9100 to avoid ClickHouse's host 9000 (native)
+      - "9101:9001" # console
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   qdrant_storage:
   postgres_data:
   nats_data:
   clickhouse_data:
+  minio_data:

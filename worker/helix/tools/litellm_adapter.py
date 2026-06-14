@@ -13,17 +13,29 @@ adapter is unit-testable without the dependency installed or a network/API key.
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, cast
 
-from helix.logging import SpanLogger
+from helix.logging import SpanLogger, new_id
+from helix.tools.blob import BlobStore, maybe_offload
 from helix.tools.llm_cache import LLMCache, cache_enabled
+from helix.tools.rate_limit import RedisRateLimiter
 
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 _DEFAULT_NUM_RETRIES = 4
 _DEFAULT_LOGGER = SpanLogger()
+
+
+def _span_payloads_enabled() -> bool:
+    """Whether to capture prompt/completion payloads on LLM spans (``HELIX_SPAN_PAYLOADS``).
+
+    Off by default: payloads stay out of spans, preserving privacy posture and eval
+    determinism. When on, large payloads are offloaded to MinIO by reference.
+    """
+    return os.environ.get("HELIX_SPAN_PAYLOADS", "").lower() in ("1", "true", "yes")
 
 
 def _default_num_retries() -> int:
@@ -80,6 +92,8 @@ async def llm_call(
     span_logger: SpanLogger | None = None,
     completion_fn: Callable[..., Awaitable[Any]] | None = None,
     cost_fn: Callable[[Any], float] | None = None,
+    rate_limiter: RedisRateLimiter | None = None,
+    blob_store: BlobStore | None = None,
 ) -> LLMResponse:
     """Call a model via LiteLLM (cached), emitting a ``kind="llm"`` span.
 
@@ -119,6 +133,9 @@ async def llm_call(
             acompletion = completion_fn or _lazy_acompletion()
             cost = cost_fn or _lazy_cost()
             retries = num_retries if num_retries is not None else _default_num_retries()
+            # Distributed rate gate (no-op without Redis); skipped on cache hits above.
+            if rate_limiter is not None:
+                await rate_limiter.acquire()
             raw = await acompletion(
                 model=model,
                 messages=messages,
@@ -153,5 +170,12 @@ async def llm_call(
         attrs["cost_usd"] = resp.cost_usd
         attrs["cache_hit"] = resp.cache_hit
         attrs["replayed"] = resp.replayed
+
+        # Gated payload capture: keep prompts/completions out of spans by default;
+        # when enabled, offload anything over 32 KB to MinIO and reference by URI.
+        if _span_payloads_enabled():
+            payload_id = new_id()
+            await maybe_offload(attrs, "prompt", json.dumps(messages), blob_store, payload_id)
+            await maybe_offload(attrs, "completion", resp.text, blob_store, payload_id)
 
     return resp

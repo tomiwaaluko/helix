@@ -1,6 +1,7 @@
 """Unit tests for helix.otel — OTel span export integration."""
 
-import sys
+from __future__ import annotations
+
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -33,39 +34,41 @@ def test_configure_otel_no_op_when_empty_string() -> None:
     assert not otel_module._configured
 
 
+# configure_otel does `from opentelemetry... import X` *inside* the function. We patch
+# the attributes on the real opentelemetry modules rather than swapping sys.modules:
+# once any dependency (redis, litellm) genuinely imports opentelemetry, a sys.modules
+# fake is bypassed by `from pkg import attr`. Patching the real target intercepts the
+# in-function import regardless of import order, and mocking set_tracer_provider keeps
+# the OTel global provider untouched. See ISSUES.md.
+_OTEL_TARGETS = (
+    "opentelemetry.sdk.trace.export.BatchSpanProcessor",
+    "opentelemetry.sdk.trace.TracerProvider",
+    "opentelemetry.exporter.otlp.proto.grpc.trace_exporter.OTLPSpanExporter",
+    "opentelemetry.trace.set_tracer_provider",
+)
+
+
 def test_configure_otel_idempotent() -> None:
-    """Calling configure_otel twice with a valid endpoint only configures once."""
-    mock_provider = MagicMock()
-    mock_trace = MagicMock()
-
-    otel_patches: dict[str, Any] = {
-        "opentelemetry.trace": mock_trace,
-        "opentelemetry.sdk.trace": MagicMock(TracerProvider=MagicMock(return_value=mock_provider)),
-        "opentelemetry.sdk.trace.export": MagicMock(),
-        "opentelemetry.sdk.resources": MagicMock(),
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": MagicMock(),
-    }
-
-    with patch.dict(sys.modules, otel_patches):
+    """Two calls configure the global provider exactly once."""
+    with (
+        patch(_OTEL_TARGETS[0]),
+        patch(_OTEL_TARGETS[1]),
+        patch(_OTEL_TARGETS[2]),
+        patch(_OTEL_TARGETS[3]) as mock_set,
+    ):
         otel_module.configure_otel("localhost:4317")
-        otel_module.configure_otel("localhost:4317")  # second call must be no-op
-
-    assert mock_trace.set_tracer_provider.call_count == 1
+        otel_module.configure_otel("localhost:4317")  # second call must be a no-op
+    assert mock_set.call_count == 1
 
 
 def test_configure_otel_sets_configured_flag() -> None:
-    mock_trace = MagicMock()
-    otel_patches: dict[str, Any] = {
-        "opentelemetry.trace": mock_trace,
-        "opentelemetry.sdk.trace": MagicMock(),
-        "opentelemetry.sdk.trace.export": MagicMock(),
-        "opentelemetry.sdk.resources": MagicMock(),
-        "opentelemetry.exporter.otlp.proto.grpc.trace_exporter": MagicMock(),
-    }
-
-    with patch.dict(sys.modules, otel_patches):
+    with (
+        patch(_OTEL_TARGETS[0]),
+        patch(_OTEL_TARGETS[1]),
+        patch(_OTEL_TARGETS[2]),
+        patch(_OTEL_TARGETS[3]),
+    ):
         otel_module.configure_otel("localhost:4317")
-
     assert otel_module._configured
 
 
@@ -76,7 +79,6 @@ def test_configure_otel_graceful_on_import_error() -> None:
         raise ImportError("not installed")
 
     with patch("builtins.__import__", side_effect=_raise_import):
-        # Should not raise even when the import itself fails.
         try:
             otel_module.configure_otel("localhost:4317")
         except ImportError:
@@ -104,15 +106,9 @@ def test_span_exporter_calls_start_and_end_when_configured() -> None:
     mock_tracer = MagicMock()
     mock_tracer.start_span.return_value = mock_span
 
-    mock_trace = MagicMock()
-    mock_trace.get_tracer.return_value = mock_tracer
-    mock_trace.StatusCode.OK = "OK"
-    mock_trace.StatusCode.ERROR = "ERROR"
-    mock_trace.Status = MagicMock()
-
     otel_module._configured = True  # pretend configure_otel was called
     try:
-        with patch.dict(sys.modules, {"opentelemetry.trace": mock_trace}):
+        with patch("opentelemetry.trace.get_tracer", return_value=mock_tracer):
             with otel_module.OtelSpanExporter("my-span", {"k": "v"}):
                 pass
     finally:
@@ -128,12 +124,9 @@ def test_span_exporter_sets_error_status_on_exception_when_configured() -> None:
     mock_tracer = MagicMock()
     mock_tracer.start_span.return_value = mock_span
 
-    mock_trace = MagicMock()
-    mock_trace.get_tracer.return_value = mock_tracer
-
     otel_module._configured = True
     try:
-        with patch.dict(sys.modules, {"opentelemetry.trace": mock_trace}):
+        with patch("opentelemetry.trace.get_tracer", return_value=mock_tracer):
             with pytest.raises(RuntimeError):
                 with otel_module.OtelSpanExporter("failing-span"):
                     raise RuntimeError("boom")

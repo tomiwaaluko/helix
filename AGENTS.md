@@ -6,15 +6,17 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: M2 — ClickHouse + OTel collector
+## Current phase: M3 — Redis + MinIO
 
-**The authoritative scope is `docs/m2-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
+**The authoritative scope is `docs/m3-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-M2 adds observability infrastructure on top of the M1 control plane. The full stack on disk:
+M3 adds ephemeral coordination (Redis) and blob storage (MinIO) on top of the M2 stack. The full stack on disk:
 
 - **Postgres 15** for run/task/worker state (`migrations/202606150001_initial_schema.sql`)
 - **NATS JetStream** for task dispatch (`helix.tasks.dispatch.<pool>`)
 - **ClickHouse 24** for spans + shell tables (`migrations/clickhouse/202606150001_initial_schema.sql`)
+- **Redis 7** for the exactly-once sentinel and the LLM rate limiter (`worker/helix/runtime/idempotency.py`, `worker/helix/tools/rate_limit.py`)
+- **MinIO** for large span-payload blobs (`worker/helix/tools/blob.py`) — `s3://helix-blobs/<y>/<m>/<d>/<span_id>.bin`
 - **Go orchestrator** (`cmd/orchestrator/`) — gRPC + REST server, migration runner
 - **Go collector** (`cmd/collector/`) — OTLP/gRPC receiver → ClickHouse BatchWriter
 - **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer
@@ -23,11 +25,12 @@ M2 adds observability infrastructure on top of the M1 control plane. The full st
 - **JSONL spans** (`data/spans.jsonl`) — still written; OTel is additive (dual-write)
 - **OTel integration** (`worker/helix/otel.py`) — no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` unset
 
-`make eval` continues to run in local mode (Python in-process). `make dev` boots Qdrant + Postgres + NATS + ClickHouse. `make collector` runs the OTel collector against the local stack.
+Redis and MinIO are **no-ops when `REDIS_URL` / `S3_ENDPOINT` are unset**: `make eval` runs in local mode (Python in-process) with neither. `make dev` boots Qdrant + Postgres + NATS + ClickHouse + Redis + MinIO. MinIO's API is on host **9100** (console 9101) to avoid ClickHouse's host 9000. Span-payload offload is gated by `HELIX_SPAN_PAYLOADS` (default off).
 
 What is NOT yet on disk (future milestones):
 - `llm_calls`, `retrievals`, `eval_events` ClickHouse tables are created as empty shells; mining lands in M5.
-- Redis (M3), MinIO (M3), Next.js dashboard (M4), failure miner as production workflow (M5), Helm/Kubernetes (M6).
+- Go orchestrator/collector Redis + MinIO wiring (signed-URL trace endpoint) lands with the M4 dashboard.
+- Next.js dashboard (M4), failure miner as production workflow (M5), Helm/Kubernetes (M6).
 
 Update this section when M3 lands (Redis + MinIO).
 

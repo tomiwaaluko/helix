@@ -8,6 +8,7 @@ the engine.
 from __future__ import annotations
 
 from helix.decorators import Task, Workflow, gather, task, workflow
+from helix.runtime.idempotency import configure_redis, exactly_once
 from helix.types import Answer, Citation, Doc
 
 __all__ = [
@@ -16,6 +17,8 @@ __all__ = [
     "Doc",
     "Task",
     "Workflow",
+    "configure_redis",
+    "exactly_once",
     "gather",
     "task",
     "workflow",

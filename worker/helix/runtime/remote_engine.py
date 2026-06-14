@@ -24,7 +24,7 @@ import time
 import uuid
 from collections.abc import Callable, Coroutine
 from types import TracebackType
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import grpc
 import nats
@@ -32,6 +32,10 @@ import nats.js
 import nats.js.errors
 
 from helix.logging import SpanLogger
+from helix.runtime.idempotency import Idempotency
+
+if TYPE_CHECKING:
+    from redis.asyncio import Redis
 
 # Proto stubs live in helix/v1/ — generated, do not edit by hand.
 from helix.v1 import orchestrator_pb2, orchestrator_pb2_grpc, types_pb2
@@ -50,6 +54,7 @@ class RemoteEngine:
         orchestrator_url: str,
         nats_url: str,
         pool: str,
+        redis: Redis | None = None,
     ) -> None:
         # Strip scheme for gRPC target
         grpc_target = orchestrator_url.removeprefix("grpc://").removeprefix("grpcs://")
@@ -63,6 +68,8 @@ class RemoteEngine:
         self._nc: nats.NATS | None = None
         self._js: nats.js.JetStreamContext | None = None
         self._span_logger = SpanLogger()
+        # Exactly-once sentinel; a no-op when redis is None (M2 behavior).
+        self._idempotency = Idempotency(redis)
         self._running = False
 
     def register_workflow(self, name: str, handler: WorkflowHandler) -> None:
@@ -155,14 +162,27 @@ class RemoteEngine:
             logger.warning("heartbeat stream ended: %s", e)
 
     async def _handle_envelope(self, envelope: types_pb2.TaskEnvelope) -> None:
-        """Execute a single task envelope and report completion."""
+        """Execute a single task envelope and report completion.
+
+        Guarded by the exactly-once sentinel: a duplicate delivery of the same
+        ``(task_id, attempt)`` is skipped so the handler body runs once. The
+        orchestrator's CompleteTask remains idempotent as a second line of defense.
+        """
         task_id = envelope.task_id
+        attempt = envelope.attempt_number
+
+        if not await self._idempotency.begin(task_id, attempt, owner=self._worker_id):
+            logger.info("skipping duplicate delivery of task %s attempt %d", task_id, attempt)
+            return
+
         handler = self._workflows.get(envelope.workflow_name)
 
         if handler is None:
+            # Permanent failure — keep the sentinel so duplicates do not re-run.
+            await self._idempotency.complete(task_id, attempt)
             await self._complete(
                 task_id=task_id,
-                attempt=envelope.attempt_number,
+                attempt=attempt,
                 status="failed",
                 output=b"{}",
                 error=f"unknown workflow {envelope.workflow_name!r}",
@@ -181,9 +201,10 @@ class RemoteEngine:
             output_json = json.dumps(
                 result if isinstance(result, dict) else {"result": str(result)}
             ).encode()
+            await self._idempotency.complete(task_id, attempt)
             await self._complete(
                 task_id=task_id,
-                attempt=envelope.attempt_number,
+                attempt=attempt,
                 status="succeeded",
                 output=output_json,
                 error="",
@@ -193,9 +214,11 @@ class RemoteEngine:
         except Exception as exc:  # noqa: BLE001
             duration_ms = int(time.monotonic() * 1000) - start_ms
             logger.exception("task %s failed: %s", task_id, exc)
+            # Transient failure — release the claim so a retry can re-run.
+            await self._idempotency.release(task_id, attempt)
             await self._complete(
                 task_id=task_id,
-                attempt=envelope.attempt_number,
+                attempt=attempt,
                 status="failed",
                 output=b"{}",
                 error=str(exc),

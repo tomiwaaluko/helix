@@ -26,8 +26,10 @@ from typing import Any
 from helix import gather, task, workflow
 from helix.logging import SpanLogger
 from helix.rag.retriever import HybridRetriever
+from helix.tools.blob import BlobStore
 from helix.tools.litellm_adapter import llm_call
 from helix.tools.llm_cache import LLMCache
+from helix.tools.rate_limit import RedisRateLimiter
 from helix.types import Answer, Citation, Doc
 
 _PROMPT_DIR = Path(__file__).parent / "prompts"
@@ -49,6 +51,8 @@ class ResearchDeps:
     cache: LLMCache | None = None
     completion_fn: Callable[..., Awaitable[Any]] | None = None
     cost_fn: Callable[[Any], float] | None = None
+    rate_limiter: RedisRateLimiter | None = None
+    blob_store: BlobStore | None = None
 
 
 _deps: ContextVar[ResearchDeps | None] = ContextVar("helix_research_deps", default=None)
@@ -139,6 +143,8 @@ async def decompose(question: str) -> list[str]:
         cache=deps.cache,
         completion_fn=deps.completion_fn,
         cost_fn=deps.cost_fn,
+        rate_limiter=deps.rate_limiter,
+        blob_store=deps.blob_store,
     )
     return _parse_subqueries(response.text, fallback=question)
 
@@ -164,6 +170,8 @@ async def synthesize(question: str, evidence: list[Doc]) -> Answer:
         cache=deps.cache,
         completion_fn=deps.completion_fn,
         cost_fn=deps.cost_fn,
+        rate_limiter=deps.rate_limiter,
+        blob_store=deps.blob_store,
     )
     return _parse_synthesis(response.text, evidence)
 
