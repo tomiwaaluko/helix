@@ -291,6 +291,36 @@
 - **Watch for:** a promoted candidate that does not lift `make eval` recall — could mean the
   retriever improved but the workflow is the bottleneck.
 
+### Canary dispatch routed both arms to candidate retriever when promotion-alias ≠ "corpus.active"
+
+- **Date / session:** 2026-06-14, Claude Code
+- **Symptom:** BRIGHT-B1 and BRIGHT-B2 both reported exactly `recall@10: Δ +0.0000` even though
+  a post-hoc diagnostic on the B1 candidate showed +0.1784 (45 Miss→Hit, 0 regressions). The
+  model clearly learned something, but the canary gate measured zero delta on every run.
+- **Root cause:** `_build_promotion_backends._retrieve()` in `helix/cli.py` dispatched via:
+  ```python
+  retriever = base_retriever if collection == ACTIVE_ALIAS else candidate_retriever
+  ```
+  `ACTIVE_ALIAS = "corpus.active"` is hardcoded. `promote_candidate()` calls `_retrieve(q,
+  active_alias, k)` for the before-arm and `_retrieve(q, candidate_collection, k)` for the
+  after-arm. When `--promotion-alias corpus.bright.active`, `active_alias = "corpus.bright.active"`
+  ≠ `"corpus.active"`, so neither arm matched ACTIVE_ALIAS, and **both** arms routed to
+  `candidate_retriever` (the `else` branch). Before = candidate, after = candidate → Δ = 0 by
+  construction, regardless of fine-tune quality.
+- **Fix:** Changed dispatch to:
+  ```python
+  retriever = candidate_retriever if collection == candidate_collection else base_retriever
+  ```
+  `candidate_collection` is the freshly-built Qdrant collection name (e.g. `corpus.candidate.<job>`);
+  `base_retriever` now correctly handles any active alias. Removed now-unused `ACTIVE_ALIAS` import.
+  Commit `d410252`.
+- **Guard:** `test_promotion_hybrid_retrieve_fn_routes_and_dedupes` already exercises the routing
+  table; also covered by 139 tests passing. To make the guard airtight, add an integration test that
+  calls `promote_candidate` with `active_alias != "corpus.active"` and asserts `before != after`.
+- **Watch for:** any `Δ = 0.0000` promotion result where the training loss clearly converged. Check
+  that `_retrieve`'s dispatch condition references `candidate_collection` (the runtime value), not
+  any hardcoded alias string.
+
 ### Holdout dataset access is guarded — don't read it directly
 
 - **Date / session:** standing constraint
