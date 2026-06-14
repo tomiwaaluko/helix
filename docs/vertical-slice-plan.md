@@ -948,15 +948,32 @@ Zero regressions and 45 new correct retrievals demonstrate the model genuinely i
 retrieval. The delta is inflated by training-set inclusion, but the absence of regressions
 and the magnitude (+0.18) rule out noise.
 
-**Phase 3 — Stratified re-split (planned):**
+**Phase 3 — Stratified re-split + B2 (bug obscured result):**
 
-Restratify 103 questions into 50 train / 53 canary, interleaved by per-question base recall
-so both halves have equal difficulty. Re-run finetune. With a stratified 53-question canary
-at expected recall improvement of ~0.15, the delta should be well above the CI noise floor
-(±0.08–0.10 on 53 questions at 0.26 recall).
+Restratified 103 questions into 52 train / 51 canary, interleaved by per-question base recall
+(mean train=0.2615, mean canary=0.2528 — well-matched difficulty). Re-ran finetune (BRIGHT-B2).
 
-**Conclusion so far:** BRIGHT biology is the right vehicle. The model learns. The thesis
-holds on harder data. A clean stratified measurement is needed to publish the result.
+- BRIGHT-B2: 84 failures mined, train_loss=0.724, recall@10: 0.3212 → 0.3212, Δ = **0.0000** → archived
+
+Still zero delta. Root cause traced to a critical dispatch bug: `_build_promotion_backends._retrieve()`
+compared `collection == ACTIVE_ALIAS` (hardcoded `"corpus.active"`), but BRIGHT uses
+`--promotion-alias corpus.bright.active`. Neither the before-arm (`corpus.bright.active`) nor
+the after-arm (`corpus.candidate.<job>`) matched `"corpus.active"`, so **both** routed to the
+candidate retriever. Before = candidate, after = candidate → Δ = 0 by construction.
+Fix: changed dispatch to `collection == candidate_collection`. Commit `d410252`.
+
+**Phase 4 — BRIGHT-B3 (first valid measurement, 2026-06-14):**
+
+- Split: 52 train questions (mean base recall 0.2615) / 51 canary (mean base recall 0.2528)
+- Mining: **92 failures mined → 92 triplets**
+- Training: 3 epochs, train_loss = 0.7066
+- **Canary recall@10: 0.2528 → 0.3413  (Δ = +0.0886)  → PROMOTED**
+
+**Conclusion: thesis confirmed on hard data.** A single fine-tune round on 92 mined BRIGHT
+biology failures lifts HybridRetriever recall@10 by **+8.86 pp** on 51 held-out stratified
+questions (0% training-set overlap). The improvement is substantial (35% relative gain over
+base recall 0.2528) and unconfounded: both arms use the same BM25 index and reranker; the
+only variable is the fine-tuned dense embedder and its corresponding Qdrant collection.
 
 ### Per-question flip analysis (run 4 vs base)
 

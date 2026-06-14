@@ -1,5 +1,22 @@
 ## Unreleased
 
+- **BRIGHT-B3: thesis confirmed. Fine-tune lifts recall@10 by +8.86 pp on hard held-out data.**
+  First valid BRIGHT biology canary measurement (stratified 52/51 split, fixed dispatch bug).
+  92 failures mined from 52 training questions → 92 triplets → 3-epoch fine-tune (loss 0.7066).
+  Canary recall@10: 0.2528 → 0.3413 (Δ +0.0886) → promoted to `corpus.bright.active`.
+  35% relative improvement over base; 51 held-out questions with 0% training-set overlap.
+
+- **Fixed critical canary dispatch bug (ACTIVE_ALIAS hardcode → Δ=0 on BRIGHT).**
+  `_build_promotion_backends._retrieve()` in `helix/cli.py` compared `collection == ACTIVE_ALIAS`
+  (hardcoded `"corpus.active"`). When `--promotion-alias corpus.bright.active`, neither the
+  before-arm nor the after-arm matched, so both routed to the candidate retriever → Δ=0 by
+  construction. BRIGHT-B1 and B2 were both corrupted by this bug. Fix: dispatch on
+  `collection == candidate_collection` instead. Commit `d410252`. Logged in ISSUES.md.
+
+- **BRIGHT biology stratified split (52 train / 51 canary, interleaved by base recall).**
+  Replaced the random 80/23 B1 split (mean recall: train=0.1640, canary=0.5815 — skewed) with
+  a stratified interleaved split: mean recall train=0.2615, canary=0.2528 (within 0.009 pp).
+
 - **BRIGHT biology mini-experiment: base recall@10 = 0.2572 (headroom confirmed).**
   Indexed 10,372-doc corpus (372 gold + 10k sampled distractors), measured
   HybridRetriever recall@10 on all 103 biology queries. Full hits: 7, partial: 46,

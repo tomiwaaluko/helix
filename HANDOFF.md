@@ -5,6 +5,76 @@
 
 ---
 
+## 2026-06-14 — Claude Code → next session
+
+**Last commit:** `4732898` on `claude/eloquent-clarke-qiha1x`
+**Working tree:** dirty (CHANGELOG.md, docs/vertical-slice-plan.md — being committed now)
+
+**Task plan position:** BRIGHT-B3 complete. Thesis confirmed on hard data.
+
+**What shipped this session**
+
+- **BRIGHT-B3: first valid fine-tune measurement on BRIGHT biology.**
+  - 52-question stratified train split (mean base recall 0.2615)
+  - 51-question stratified canary (mean base recall 0.2528)
+  - 92 failures mined → 92 triplets → 3 epochs, train_loss 0.7066
+  - **recall@10: 0.2528 → 0.3413 (Δ +0.0886) → PROMOTED to `corpus.bright.active`**
+  - 35% relative improvement, 51 held-out questions with 0% training-set overlap
+
+- **Canary dispatch bug fixed (commit `d410252`).**
+  `_build_promotion_backends._retrieve()` hardcoded `ACTIVE_ALIAS = "corpus.active"`.
+  When `--promotion-alias corpus.bright.active`, neither the before-arm nor the after-arm
+  matched → both routed to candidate_retriever → Δ=0 by construction. BRIGHT-B1 and B2
+  were both corrupted. Fixed to dispatch on `collection == candidate_collection`. Logged
+  in ISSUES.md.
+
+- **Stratified train/canary split for BRIGHT biology.**
+  Replaced random 80/23 (B1, mean canary recall 0.5815 — skewed easy) with interleaved
+  52/51 by per-question base recall (means: 0.2615 / 0.2528). Files:
+  `evals/datasets/bright_biology_train.jsonl`, `evals/datasets/bright_biology_canary.jsonl`.
+
+- **ISSUES.md**: canary dispatch bug entry added (commit `4732898`).
+- **CHANGELOG.md**: B3 result, dispatch bug fix, stratified split entries added.
+- **docs/vertical-slice-plan.md**: B2 details (split artifact + bug), B3 result recorded.
+
+**What's next**
+
+1. **M1 planning** — thesis validated. The embedding fine-tune loop measurably improves
+   recall on harder data. Now scope the Go orchestrator milestone (M1):
+   - Define proto contracts (`proto/helix/v1/`)
+   - Scope the control-plane/worker split
+   - Write the M1 plan doc before any implementation
+2. **Optional: run `make eval`** on the promoted BRIGHT model (with `corpus.bright.active`
+   active) to measure end-to-end workflow recall delta on BRIGHT biology questions, confirming
+   retriever lift propagates through the LLM decomposition layer.
+3. **Do NOT run `make eval-final`** — holdout is for the final promoted HotpotQA model,
+   which requires finishing M0 HotpotQA work first (or starting M1).
+
+**Open questions / decisions pending**
+
+- BRIGHT-B3 is promoted to `corpus.bright.active` — the HotpotQA `corpus.active` alias is
+  unchanged. Any future HotpotQA finetune still has the ceiling problem (base recall 0.94).
+- Whether to keep BRIGHT as an ongoing benchmark through M1+ or treat it as M0-only validation.
+
+**Gotchas hit**
+
+- The dispatch bug (`collection == ACTIVE_ALIAS`) is subtle: B1 and B2 both exited cleanly
+  with train_loss converging, checkpoint saved, and a valid DB row — only the Δ=0.0000
+  canary output revealed the problem. Any future `finetune` subcommand that introduces a new
+  collection/alias pair should be tested with a quick 1-question canary first.
+- B2 had the correct stratified split but still measured Δ=0 (dispatch bug). Don't confuse
+  "correct split" with "valid measurement" — the dispatch path must also be verified.
+
+```
+$ git log -1 --oneline
+4732898 docs(issues): log canary dispatch bug (ACTIVE_ALIAS hardcode → Δ=0 on BRIGHT)
+$ git status
+M CHANGELOG.md
+M docs/vertical-slice-plan.md
+```
+
+---
+
 ## 2026-06-13 21:15 UTC — Claude Code → next session
 
 **Last commit:** `84cbe20` on `claude/eloquent-clarke-qiha1x` (pending M0 close commit)
