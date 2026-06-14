@@ -182,7 +182,44 @@ func TestListRuns_EmptyStore_ReturnsEmptyArray(t *testing.T) {
 
 // ── GET /api/v1/runs/{run_id} ─────────────────────────────────────────────────
 
-func TestGetRun_Found_Returns200(t *testing.T) {
+func TestGetRun_Found_Returns200WithTaskTree(t *testing.T) {
+	ms := &testutil.MockStore{
+		ListTasksForRunFn: func(_ context.Context, runID string) ([]store.Task, error) {
+			return []store.Task{
+				{ID: "task-1", RunID: runID, NodeID: "root", Status: store.TaskStatusSucceeded, Attempts: 1},
+			}, nil
+		},
+	}
+	h := newHandler(ms, &testutil.MockPublisher{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/runs/run-abc", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	var body struct {
+		ID    string `json:"id"`
+		Tasks []struct {
+			ID     string `json:"id"`
+			NodeID string `json:"node_id"`
+			Status string `json:"status"`
+		} `json:"tasks"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if body.ID != "run-abc" {
+		t.Errorf("want id=run-abc, got %v", body.ID)
+	}
+	if len(body.Tasks) != 1 {
+		t.Fatalf("want 1 task, got %d", len(body.Tasks))
+	}
+	if body.Tasks[0].NodeID != "root" || body.Tasks[0].Status != "succeeded" {
+		t.Errorf("unexpected task: %+v", body.Tasks[0])
+	}
+}
+
+func TestGetRun_TasksEmpty_ReturnsEmptyArray(t *testing.T) {
 	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
 	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/runs/run-abc", nil))
 	w := httptest.NewRecorder()
@@ -190,12 +227,24 @@ func TestGetRun_Found_Returns200(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var run map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &run); err != nil {
-		t.Fatalf("invalid JSON: %v", err)
+	// tasks must serialize as [] not null
+	if !strings.Contains(w.Body.String(), `"tasks":[]`) {
+		t.Errorf("want empty tasks array, got %s", w.Body.String())
 	}
-	if run["id"] != "run-abc" {
-		t.Errorf("want id=run-abc, got %v", run["id"])
+}
+
+func TestGetRun_ListTasksError_Returns500(t *testing.T) {
+	ms := &testutil.MockStore{
+		ListTasksForRunFn: func(_ context.Context, _ string) ([]store.Task, error) {
+			return nil, fmt.Errorf("db gone")
+		},
+	}
+	h := newHandler(ms, &testutil.MockPublisher{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/runs/run-abc", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", w.Code)
 	}
 }
 

@@ -14,6 +14,7 @@ type MockStore struct {
 	EnsureWorkflowFn   func(ctx context.Context, name string) (string, error)
 	CreateRunFn        func(ctx context.Context, in store.CreateRunInput) (store.Run, store.Task, error)
 	GetRunFn           func(ctx context.Context, runID string) (store.Run, error)
+	ListTasksForRunFn  func(ctx context.Context, runID string) ([]store.Task, error)
 	ListRunsFn         func(ctx context.Context, status string) ([]store.Run, error)
 	CancelRunFn        func(ctx context.Context, runID string) error
 	RegisterWorkerFn   func(ctx context.Context, pool string, caps []string, max int) (store.Worker, error)
@@ -45,6 +46,13 @@ func (m *MockStore) GetRun(ctx context.Context, runID string) (store.Run, error)
 		return m.GetRunFn(ctx, runID)
 	}
 	return store.Run{ID: runID, Status: store.RunStatusRunning}, nil
+}
+
+func (m *MockStore) ListTasksForRun(ctx context.Context, runID string) ([]store.Task, error) {
+	if m.ListTasksForRunFn != nil {
+		return m.ListTasksForRunFn(ctx, runID)
+	}
+	return []store.Task{}, nil
 }
 
 func (m *MockStore) ListRuns(ctx context.Context, status string) ([]store.Run, error) {

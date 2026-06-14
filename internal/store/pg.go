@@ -170,6 +170,33 @@ func (s *postgresStore) GetRun(ctx context.Context, runID string) (Run, error) {
 	return run, nil
 }
 
+// ListTasksForRun returns the tasks belonging to a run, ordered by id.
+func (s *postgresStore) ListTasksForRun(ctx context.Context, runID string) ([]Task, error) {
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, run_id, node_id, status, attempts
+		 FROM tasks WHERE run_id = $1 ORDER BY id`,
+		runID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("store: list tasks for run %q: %w", runID, err)
+	}
+	defer rows.Close()
+
+	var tasks []Task
+	for rows.Next() {
+		var t Task
+		if err := rows.Scan(&t.ID, &t.RunID, &t.NodeID, &t.Status, &t.Attempts); err != nil {
+			return nil, fmt.Errorf("store: scan task row: %w", err)
+		}
+		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("store: iterate tasks for run %q: %w", runID, err)
+	}
+
+	return tasks, nil
+}
+
 // ListRuns returns up to 100 runs, optionally filtered by status.
 func (s *postgresStore) ListRuns(ctx context.Context, status string) ([]Run, error) {
 	var rows pgx.Rows

@@ -5,6 +5,45 @@
 
 ---
 
+## 2026-06-14 — Claude Code → next session (M4)
+
+**Last commit:** (see `git log -1 --oneline` after the M4 commit)
+**Working tree:** clean after this commit
+
+**Task plan position:** M4 complete per `docs/m4-plan.md` definition of done (thin Runs dashboard, maintainer-approved).
+
+**What shipped this session**
+
+- **M4 dashboard — thin Runs slice (web/ + small Go addition):**
+  - `docs/m4-plan.md` — approved (generate types from `web/openapi.yaml`; separate `web-*` targets; polling not SSE)
+  - Go backend (additive): `store.ListTasksForRun` (interface + `pg.go` + `MockStore`); `getRun` now returns `runDetailResponse{Run, tasks}`; 3 new handler tests
+  - `web/` — Next.js 14 App Router, TS strict, TanStack Query, shadcn/ui, Tailwind
+    - Pages: `/runs` (`runs-table.tsx`, status filter, 3 s polling) and `/runs/[id]` (`run-detail.tsx`, metadata + input/output JSON + task tree + cancel)
+    - BFF proxy: `web/app/api/runs/**` route handlers attach the bearer token server-side (`lib/orchestrator.ts`); browser only talks same-origin → token never bundled, no orchestrator CORS
+    - Types generated from `web/openapi.yaml` (runs subset) → `web/lib/api-types.ts` via `openapi-typescript`
+    - 18 vitest tests (components, lib, BFF helper)
+  - `Makefile`: `web`, `web-install`, `web-build`, `web-lint`, `web-test`, `web-gate` (kept out of root `make test`/`make lint`)
+  - Docs: `docs/api.md` (run detail `tasks`), `AGENTS.md` (M3→M4), `CHANGELOG.md`
+
+**Gates passing**
+- Go: `go test ./cmd/... ./internal/... ./gen/...` green; `golangci-lint` 0 issues
+- Python (unchanged): 169 tests; ruff + mypy --strict clean
+- Web (`make web-gate`): `tsc --noEmit` clean, `next lint` clean, prettier clean, 18 vitest tests, `next build` succeeds (routes split: `/api/runs*` are server-only functions)
+
+**What's next (M5)**
+- Failure miner as a production workflow reading ClickHouse (the research headline)
+- Dashboard trace/eval views + the orchestrator's signed-URL trace endpoint (Go MinIO wiring — the M3 `BlobStore` primitive)
+- Wire `web` into CI
+
+**Open questions / gotchas**
+- **node 22 + npm 10 are available in the cloud**, so the dashboard builds/tests here; only the live end-to-end view (dashboard against a running orchestrator) needs the local Docker stack. `make web-gate` is the cloud-runnable gate.
+- The dashboard reads `ORCHESTRATOR_URL` (default `http://localhost:8080`) and `HELIX_API_TOKEN` **server-side only** (BFF). Run locally: `make dev` + `make orchestrator` + a worker, then `cd web && ORCHESTRATOR_URL=... HELIX_API_TOKEN=... npm run dev`.
+- `web/lib/api-types.ts` is **generated** (`npm run gen:types` from `web/openapi.yaml`) and prettier-ignored — do not hand-edit. Single-task DAG means run detail shows one task today; the shape supports fan-out.
+- Go `[]byte` fields (`input`/`output`/`error`) serialize as base64; the dashboard base64-decodes + pretty-prints them (`decodeJsonBytes`).
+- `web` is intentionally out of the root `make test`/`make lint` so the Python+Go gate stays node-free.
+
+---
+
 ## 2026-06-14 — Claude Code → next session (M3)
 
 **Last commit:** (see `git log -1 --oneline` after the M3 commit)

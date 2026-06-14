@@ -1,0 +1,5 @@
+node_modules
+.next
+out
+build
+lib/api-types.ts

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	collectorv1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
+	commonv1 "go.opentelemetry.io/proto/otlp/common/v1"
 	resourcev1 "go.opentelemetry.io/proto/otlp/resource/v1"
 	tracev1 "go.opentelemetry.io/proto/otlp/trace/v1"
 

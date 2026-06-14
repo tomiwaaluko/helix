@@ -85,6 +85,13 @@ JSON over HTTPS. Authenticated via bearer token in `Authorization: Bearer <token
 
 `idempotency_key` is honored for 24h; resubmitting the same key returns the original run_id.
 
+> **Implemented (M1–M4):** `POST`/`GET`/list/cancel on `/api/v1/runs`. As of M4,
+> `GET /api/v1/runs/{run_id}` returns the run fields plus a `tasks` array (each task:
+> `id`, `run_id`, `node_id`, `status`, `attempts`) — the task tree the dashboard renders.
+> The hand-maintained `web/openapi.yaml` (runs subset) is the source for the dashboard's
+> generated types until the orchestrator emits a full schema. SSE (`/events`) and `replay`
+> are not implemented yet.
+
 Replay modes:
 - `deterministic` short-circuits every recorded LLM call, retrieval, and tool call by `(input_hash, model_id, tool_name)`. Used for debugging and regression. Bytewise-identical output is the contract.
 - `live` re-executes against current models and indices. Used for comparison runs after a model promotion or prompt change.

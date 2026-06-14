@@ -1,5 +1,14 @@
 ## Unreleased
 
+- **M4: Dashboard (thin Runs slice) landed.**
+  New `web/` Next.js 14 (App Router) app: `/runs` (table + status filter + 3 s polling) and
+  `/runs/[id]` (metadata, input/output JSON, task tree, cancel). Data flows through a
+  server-side BFF proxy (`web/app/api/runs/**`) that attaches the bearer token, so it never
+  reaches the browser and the orchestrator needs no CORS. TanStack Query + shadcn/ui +
+  Tailwind; types generated from `web/openapi.yaml` via `openapi-typescript`. Backend change
+  is additive: `store.ListTasksForRun` + `GET /api/v1/runs/{id}` now returns a `tasks` array.
+  18 vitest tests + 3 new Go handler tests; `web` kept out of the root gate (run `make web-gate`).
+
 - **M3: Redis + MinIO milestone landed.**
   Redis 7 and MinIO added to `docker-compose.yml` (MinIO API remapped to host 9100 to avoid
   ClickHouse's 9000). Redis: an exactly-once sentinel keyed on `(task_id, attempt)` wired into

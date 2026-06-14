@@ -94,6 +94,9 @@ type Store interface {
 	// GetRun retrieves a run by ID, populating TaskIDs.
 	GetRun(ctx context.Context, runID string) (Run, error)
 
+	// ListTasksForRun returns the tasks belonging to a run, ordered by id.
+	ListTasksForRun(ctx context.Context, runID string) ([]Task, error)
+
 	// ListRuns returns up to 100 runs, optionally filtered by status.
 	ListRuns(ctx context.Context, status string) ([]Run, error)
 

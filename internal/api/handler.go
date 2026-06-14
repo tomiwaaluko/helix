@@ -169,6 +169,12 @@ func (h *Handler) listRuns(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, runs)
 }
 
+// runDetailResponse is the GET /api/v1/runs/{run_id} body: a run plus its task tree.
+type runDetailResponse struct {
+	store.Run
+	Tasks []store.Task `json:"tasks"`
+}
+
 // getRun handles GET /api/v1/runs/{run_id}.
 func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 	runID := chi.URLParam(r, "run_id")
@@ -184,7 +190,20 @@ func (h *Handler) getRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, run)
+	tasks, err := h.store.ListTasksForRun(r.Context(), runID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "getRun: store.ListTasksForRun failed",
+			"run_id", runID,
+			"error", err,
+		)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load run tasks"})
+		return
+	}
+	if tasks == nil {
+		tasks = []store.Task{}
+	}
+
+	writeJSON(w, http.StatusOK, runDetailResponse{Run: run, Tasks: tasks})
 }
 
 // cancelRun handles POST /api/v1/runs/{run_id}/cancel.

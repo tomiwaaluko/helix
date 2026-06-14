@@ -1,5 +1,6 @@
 .PHONY: seed eval eval-full eval-final finetune test test-eval-smoke lint fmt dev dev-down \
-        seed-bright check-bright proto build orchestrator collector worker test-integration
+        seed-bright check-bright proto build orchestrator collector worker test-integration \
+        web web-install web-build web-lint web-test web-gate
 
 # Boot Qdrant + Postgres + NATS (M1 stack)
 dev:
@@ -96,6 +97,28 @@ test:
 # End-to-end integration test (requires make dev running)
 test-integration:
 	cd worker && python3.12 -m pytest tests/integration/ -x -q -v
+
+# ── Dashboard (web/) ──────────────────────────────────────────────────────────
+# Kept out of the node-free `make test`/`make lint` gate; run `make web-gate`
+# explicitly (CI wiring lands in M5). `make web` runs the dev server, which needs
+# a running orchestrator (ORCHESTRATOR_URL, HELIX_API_TOKEN).
+web: web-install
+	cd web && npm run dev
+
+web-install:
+	cd web && npm install
+
+web-build: web-install
+	cd web && npm run gen:types && npm run build
+
+web-lint: web-install
+	cd web && npm run lint && npm run format:check && npm run typecheck
+
+web-test: web-install
+	cd web && npm run test
+
+# Full dashboard gate: types, lint, typecheck, unit tests, production build.
+web-gate: web-lint web-test web-build
 
 # BRIGHT biology mini-experiment
 # Downloads BRIGHT, builds corpus (~10.5k docs) and BM25 index, indexes into Qdrant.
