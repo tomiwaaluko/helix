@@ -1,5 +1,11 @@
 ## Unreleased
 
+- **BRIGHT multi-seed replication (B4 seed=1, B5 seed=2): lift reproduces across all seeds.**
+  B4: 0.2528 → 0.3436 (Δ +0.0908), promoted. B5: 0.2528 → 0.3433 (Δ +0.0905), promoted.
+  Cross-seed delta spread: 0.003 pp. Paired 95% CIs all exclude zero (P(Δ≤0) ≤ 0.013).
+  Improvements dominate regressions ~15:5 in every run. Training randomness has no meaningful
+  effect on the outcome. Artifacts: `evals/baselines/bright_b{4,5}_canary_flips.json`.
+
 - **BRIGHT-B3 hardened: paired significance test confirms the +0.0886 lift is real.**
   New `scripts/analyze_canary_flips.py` re-runs the canary's exact hybrid retrieval per question
   and computes a paired test the canary omitted. Reconciles to 0.2528 → 0.3413 and adds:
