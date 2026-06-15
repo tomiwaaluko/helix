@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M10: wire embedding_jobs)
+
+**Last commit:** a1c5f6e feat(M10-partial): embedding-jobs Go store, migration, and read/write handler  
+*(pre-M10 commit on branch; M10 changes not yet committed as of this entry — commit follows)*
+
+**Working tree:** Uncommitted M10 changes (see below)
+
+**Current task:** M10 — complete
+
+**What shipped:**
+- `migrations/202606160002_embedding_jobs_finetune_link.sql` — adds `finetune_job_id` FK + index to `embedding_jobs`
+- `internal/store/embedding.go` — `EmbeddingJobStore` interface + `PostgresEmbeddingJobStore` (`CreateEmbeddingJob`, `GetEmbeddingJob`, `ListEmbeddingJobs`, `UpdateEmbeddingJobOutcome`)
+- `internal/api/handler.go` — `embeddingJobStorer` interface, `WithEmbeddingJobs` setter, `listEmbeddingJobs`/`getEmbeddingJob` handlers, best-effort `CreateEmbeddingJob` call in `createFinetuneJob`
+- `internal/grpc/server.go` — `embeddingJobFinalizer` interface, `WithEmbeddingJobs` setter, best-effort `UpdateEmbeddingJobOutcome` call in `CompleteTask`
+- `cmd/orchestrator/main.go` — wires `NewPostgresEmbeddingJobStore` into handler + gRPC server
+- `internal/api/handler_test.go` — 4 new tests for embedding-jobs endpoints
+- `web/openapi.yaml` — `EmbeddingJob` schema + `/embedding-jobs` paths
+- `web/lib/api-types.ts` — regenerated from openapi.yaml
+- `web/lib/types.ts` — `EmbeddingJob` type alias
+- `web/lib/api.ts` — `fetchEmbeddingJobs`, `fetchEmbeddingJob`
+- `web/app/api/embedding-jobs/route.ts` + `web/app/api/embedding-jobs/[job_id]/route.ts` — BFF proxies
+- `web/components/embedding-job-table.tsx` — table with base model, status badge, triplets, Δ recall, promoted_at
+- `web/app/embeddings/page.tsx` — page wrapping `EmbeddingJobTable`
+- `web/app/layout.tsx` — Embeddings nav link
+- `web/components/__tests__/embedding-job-table.test.tsx` — 4 tests
+
+**Test results:** 195 Python + all Go + 54 web tests pass; lint clean
+
+**What's next:** Whatever milestone follows M10 per `docs/vertical-slice-plan.md`
+
+**Open questions:** None
+
+**Gotchas:**
+- `metrics` JSON column is typed as `{[key: string]: unknown}` in the generated TypeScript types, so nested access requires a cast to `Record<string, Record<string, number>>` in the component.
+- `UpdateEmbeddingJobOutcome` uses a `fmt.Sprintf` to inject the conditional `promoted_at` expression (either `now()` or `NULL`) because pgx won't accept NULL via a parameter for a TIMESTAMPTZ expression.
+
+```
+git log -1 --oneline
+a1c5f6e feat(M10-partial): embedding-jobs Go store, migration, and read/write handler
+git status
+On branch claude/eloquent-clarke-qiha1x
+Changes not staged for commit: (M10 implementation files)
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M9b integration test)
 
 **Last commit:** 7974e64 test(M9b): add finetune-job integration test for full NATS→worker→gRPC path

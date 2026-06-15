@@ -977,10 +977,10 @@ func TestListLlmCalls_PassesRunIdParam(t *testing.T) {
 // ── finetune-jobs endpoints ───────────────────────────────────────────────────
 
 type mockFinetuneJobStorer struct {
-	createFn  func(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error)
-	setRunFn  func(ctx context.Context, jobID, runID string) error
-	getFn     func(ctx context.Context, jobID string) (store.FinetuneJob, error)
-	listFn    func(ctx context.Context) ([]store.FinetuneJob, error)
+	createFn func(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error)
+	setRunFn func(ctx context.Context, jobID, runID string) error
+	getFn    func(ctx context.Context, jobID string) (store.FinetuneJob, error)
+	listFn   func(ctx context.Context) ([]store.FinetuneJob, error)
 }
 
 func (m *mockFinetuneJobStorer) CreateFinetuneJob(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error) {
@@ -1106,5 +1106,107 @@ func TestGetFinetuneJob_Returns200(t *testing.T) {
 	}
 	if resp.Status != "promoted" {
 		t.Errorf("want status=promoted, got %q", resp.Status)
+	}
+}
+
+// ── embedding-jobs test doubles ───────────────────────────────────────────────
+
+type mockEmbeddingJobStorer struct {
+	createFn func(ctx context.Context, baseModel string, finetuneJobID string) (store.EmbeddingJob, error)
+	getFn    func(ctx context.Context, jobID string) (store.EmbeddingJob, error)
+	listFn   func(ctx context.Context) ([]store.EmbeddingJob, error)
+}
+
+func (m *mockEmbeddingJobStorer) CreateEmbeddingJob(ctx context.Context, baseModel string, finetuneJobID string) (store.EmbeddingJob, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, baseModel, finetuneJobID)
+	}
+	return store.EmbeddingJob{ID: "emb-001", BaseModel: baseModel, Status: "queued"}, nil
+}
+
+func (m *mockEmbeddingJobStorer) GetEmbeddingJob(ctx context.Context, jobID string) (store.EmbeddingJob, error) {
+	if m.getFn != nil {
+		return m.getFn(ctx, jobID)
+	}
+	return store.EmbeddingJob{ID: jobID, BaseModel: "nomic-ai/nomic-embed-text-v1.5", Status: "promoted"}, nil
+}
+
+func (m *mockEmbeddingJobStorer) ListEmbeddingJobs(ctx context.Context) ([]store.EmbeddingJob, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx)
+	}
+	return []store.EmbeddingJob{}, nil
+}
+
+func newEmbeddingHandler(ej *mockEmbeddingJobStorer) http.Handler {
+	h := api.NewHandler(&testutil.MockStore{}, &testutil.MockPublisher{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	h = h.WithEmbeddingJobs(ej)
+	return h.Router()
+}
+
+// ── GET /api/v1/embedding-jobs ────────────────────────────────────────────────
+
+func TestListEmbeddingJobs_NotConfigured_Returns503(t *testing.T) {
+	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/embedding-jobs", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestListEmbeddingJobs_Empty_Returns200EmptyArray(t *testing.T) {
+	h := newEmbeddingHandler(&mockEmbeddingJobStorer{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/embedding-jobs", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	body := strings.TrimSpace(w.Body.String())
+	if !strings.HasPrefix(body, "[") {
+		t.Errorf("want JSON array, got %q", body)
+	}
+}
+
+// ── GET /api/v1/embedding-jobs/{job_id} ───────────────────────────────────────
+
+func TestGetEmbeddingJob_OK_Returns200(t *testing.T) {
+	ej := &mockEmbeddingJobStorer{
+		getFn: func(_ context.Context, jobID string) (store.EmbeddingJob, error) {
+			tc := 135
+			return store.EmbeddingJob{ID: jobID, BaseModel: "nomic-ai/nomic-embed-text-v1.5", Status: "promoted", TripletsCount: &tc}, nil
+		},
+	}
+	h := newEmbeddingHandler(ej)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/embedding-jobs/emb-001", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp store.EmbeddingJob
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Status != "promoted" {
+		t.Errorf("want status=promoted, got %q", resp.Status)
+	}
+}
+
+func TestGetEmbeddingJob_NotFound_Returns404(t *testing.T) {
+	ej := &mockEmbeddingJobStorer{
+		getFn: func(_ context.Context, jobID string) (store.EmbeddingJob, error) {
+			return store.EmbeddingJob{}, fmt.Errorf("embedding store: job %q not found", jobID)
+		},
+	}
+	h := newEmbeddingHandler(ej)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/embedding-jobs/missing", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", w.Code)
 	}
 }

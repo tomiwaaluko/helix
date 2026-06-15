@@ -107,6 +107,16 @@ func main() {
 		log.Info("finetune-jobs endpoints enabled")
 	}
 
+	// Embedding job store (reuses the same DATABASE_URL; shares the connection pool).
+	ejs, ejsErr := store.NewPostgresEmbeddingJobStore(ctx, cfg.DatabaseURL)
+	if ejsErr != nil {
+		log.Warn("embedding job store init failed — embedding endpoints disabled", "err", ejsErr)
+	} else {
+		defer ejs.Close()
+		h = h.WithEmbeddingJobs(ejs)
+		log.Info("embedding-jobs endpoints enabled")
+	}
+
 	// Start gRPC server
 	grpcAddr := fmt.Sprintf(":%d", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
@@ -119,6 +129,9 @@ func main() {
 	grpcHandler := grpcserver.NewServer(pg, nc, log)
 	if fjs != nil {
 		grpcHandler = grpcHandler.WithFinetuneJobs(fjs)
+	}
+	if ejs != nil {
+		grpcHandler = grpcHandler.WithEmbeddingJobs(ejs)
 	}
 	helixv1.RegisterOrchestratorServer(grpcSrv, grpcHandler)
 

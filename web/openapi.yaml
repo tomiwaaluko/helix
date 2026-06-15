@@ -273,6 +273,54 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /embedding-jobs:
+    get:
+      operationId: listEmbeddingJobs
+      summary: List embedding jobs (most recent first, up to 50).
+      responses:
+        "200":
+          description: Embedding jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmbeddingJob"
+        "503":
+          description: Embedding service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /embedding-jobs/{job_id}:
+    get:
+      operationId: getEmbeddingJob
+      summary: Fetch a single embedding job by ID.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Embedding job detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingJob"
+        "404":
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Embedding service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /evals/{eval_id}/events:
     post:
       operationId: recordEvalEvents
@@ -564,6 +612,38 @@ components:
               details:
                 type: object
                 additionalProperties: true
+    EmbeddingJob:
+      type: object
+      required: [id, base_model, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        finetune_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        base_model:
+          type: string
+        status:
+          type: string
+        triplets_count:
+          type: integer
+          nullable: true
+        metrics:
+          type: object
+          nullable: true
+          additionalProperties: true
+        artifact_uri:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        promoted_at:
+          type: string
+          format: date-time
+          nullable: true
     FinetuneJob:
       type: object
       required: [id, status, train_split, eval_split, corpus_alias, created_at, updated_at]

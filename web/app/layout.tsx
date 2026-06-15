@@ -36,6 +36,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <Link href="/finetune-jobs" className="hover:text-foreground">
                   Fine-tune
                 </Link>
+                <Link href="/embeddings" className="hover:text-foreground">
+                  Embeddings
+                </Link>
               </nav>
             </div>
           </header>

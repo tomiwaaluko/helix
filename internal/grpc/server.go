@@ -3,6 +3,7 @@ package grpcserver
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"log/slog"
 
@@ -20,13 +21,19 @@ type finetuneJobCompleter interface {
 	FinalizeFinetuneJob(ctx context.Context, taskID string, outputJSON []byte, taskStatus string) error
 }
 
+// embeddingJobFinalizer is a narrow interface for finalizing embedding_jobs on task completion.
+type embeddingJobFinalizer interface {
+	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON []byte, promoted bool) error
+}
+
 // Server implements helixv1.OrchestratorServer.
 type Server struct {
 	helixv1.UnimplementedOrchestratorServer
 
-	store        store.Store
-	logger       *slog.Logger
-	finetuneJobs finetuneJobCompleter // optional; nil → no-op
+	store         store.Store
+	logger        *slog.Logger
+	finetuneJobs  finetuneJobCompleter  // optional; nil → no-op
+	embeddingJobs embeddingJobFinalizer // optional; nil → no-op
 }
 
 // NewServer returns a new Server backed by the given store and dispatch client.
@@ -43,6 +50,13 @@ func NewServer(s store.Store, _ dispatch.Publisher, log *slog.Logger) *Server {
 // status when a finetune_job task completes via CompleteTask.
 func (s *Server) WithFinetuneJobs(fj finetuneJobCompleter) *Server {
 	s.finetuneJobs = fj
+	return s
+}
+
+// WithEmbeddingJobs wires an optional EmbeddingJobStore for finalizing embedding job
+// status when a finetune_job task completes via CompleteTask.
+func (s *Server) WithEmbeddingJobs(ej embeddingJobFinalizer) *Server {
+	s.embeddingJobs = ej
 	return s
 }
 
@@ -149,6 +163,30 @@ func (s *Server) CompleteTask(ctx context.Context, req *helixv1.CompleteTaskRequ
 				"task_id", storeResult.TaskID,
 				"error", fjErr,
 			)
+		}
+	}
+
+	// Best-effort embedding job outcome sync when a finetune_job task completes.
+	if s.embeddingJobs != nil && disposition == "accepted" && len(storeResult.OutputJSON) > 0 {
+		var out store.FinetuneTaskOutput
+		if unmarshalErr := json.Unmarshal(storeResult.OutputJSON, &out); unmarshalErr == nil && out.JobID != "" {
+			metricsJSON, _ := json.Marshal(map[string]any{
+				"before": map[string]any{"mean": out.BeforeRecall},
+				"after":  map[string]any{"mean": out.AfterRecall},
+			})
+			ejStatus := out.Outcome
+			if ejStatus == "" {
+				ejStatus = "done"
+			}
+			if ejErr := s.embeddingJobs.UpdateEmbeddingJobOutcome(
+				ctx, out.JobID, ejStatus, out.Triplets, metricsJSON, out.Outcome == "promoted",
+			); ejErr != nil {
+				s.logger.WarnContext(ctx, "UpdateEmbeddingJobOutcome failed (non-fatal)",
+					"task_id", storeResult.TaskID,
+					"finetune_job_id", out.JobID,
+					"error", ejErr,
+				)
+			}
 		}
 	}
 

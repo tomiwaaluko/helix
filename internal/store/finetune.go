@@ -13,20 +13,20 @@ import (
 
 // FinetuneJob represents one production mine→train→promote run.
 type FinetuneJob struct {
-	ID          string     `json:"id"`
-	RunID       string     `json:"run_id,omitempty"`
-	Status      string     `json:"status"`
-	TrainSplit  string     `json:"train_split"`
-	EvalSplit   string     `json:"eval_split"`
-	CorpusAlias string     `json:"corpus_alias"`
-	Failures    *int       `json:"failures,omitempty"`
-	Triplets    *int       `json:"triplets,omitempty"`
+	ID           string    `json:"id"`
+	RunID        string    `json:"run_id,omitempty"`
+	Status       string    `json:"status"`
+	TrainSplit   string    `json:"train_split"`
+	EvalSplit    string    `json:"eval_split"`
+	CorpusAlias  string    `json:"corpus_alias"`
+	Failures     *int      `json:"failures,omitempty"`
+	Triplets     *int      `json:"triplets,omitempty"`
 	BeforeRecall *float64  `json:"before_recall,omitempty"`
 	AfterRecall  *float64  `json:"after_recall,omitempty"`
-	Outcome     string     `json:"outcome,omitempty"`
-	Error       string     `json:"error,omitempty"`
-	CreatedAt   time.Time  `json:"created_at"`
-	UpdatedAt   time.Time  `json:"updated_at"`
+	Outcome      string    `json:"outcome,omitempty"`
+	Error        string    `json:"error,omitempty"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 // FinetuneJobInput holds the parameters for creating a new finetune job.
@@ -39,7 +39,7 @@ type FinetuneJobInput struct {
 // FinetuneTaskOutput is the shape of the CompleteTask output_json for finetune_job tasks.
 type FinetuneTaskOutput struct {
 	JobID        string  `json:"job_id"`
-	Outcome      string  `json:"outcome"`       // "promoted" | "archived" | "no_failures" | "no_triplets"
+	Outcome      string  `json:"outcome"` // "promoted" | "archived" | "no_failures" | "no_triplets"
 	BeforeRecall float64 `json:"before_recall"`
 	AfterRecall  float64 `json:"after_recall"`
 	Failures     int     `json:"failures"`

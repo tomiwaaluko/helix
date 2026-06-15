@@ -175,6 +175,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/embedding-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List embedding jobs (most recent first, up to 50). */
+        get: operations["listEmbeddingJobs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/embedding-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch a single embedding job by ID. */
+        get: operations["getEmbeddingJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/{eval_id}/events": {
         parameters: {
             query?: never;
@@ -322,6 +356,23 @@ export interface components {
                     [key: string]: unknown;
                 };
             }[];
+        };
+        EmbeddingJob: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            finetune_job_id?: string | null;
+            base_model: string;
+            status: string;
+            triplets_count?: number | null;
+            metrics?: {
+                [key: string]: unknown;
+            } | null;
+            artifact_uri?: string | null;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            promoted_at?: string | null;
         };
         FinetuneJob: {
             id: string;
@@ -711,6 +762,75 @@ export interface operations {
                 };
             };
             /** @description Finetune service not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listEmbeddingJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Embedding jobs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingJob"][];
+                };
+            };
+            /** @description Embedding service not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getEmbeddingJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Embedding job detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmbeddingJob"];
+                };
+            };
+            /** @description Job not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Embedding service not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;

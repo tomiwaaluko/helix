@@ -16,3 +16,4 @@ export type RetrievalRow = components["schemas"]["RetrievalRow"];
 export type LlmCallRow = components["schemas"]["LlmCallRow"];
 export type FinetuneJob = components["schemas"]["FinetuneJob"];
 export type CreateFinetuneJobRequest = components["schemas"]["CreateFinetuneJobRequest"];
+export type EmbeddingJob = components["schemas"]["EmbeddingJob"];

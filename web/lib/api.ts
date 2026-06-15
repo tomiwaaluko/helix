@@ -2,6 +2,7 @@
 // orchestrator directly. Used by TanStack Query hooks in client components.
 import type {
   CreateFinetuneJobRequest,
+  EmbeddingJob,
   EvalEvent,
   EvalSummary,
   FinetuneJob,
@@ -78,4 +79,12 @@ export async function createFinetuneJob(body: CreateFinetuneJobRequest): Promise
     throw new Error(`createFinetuneJob failed (${res.status}): ${detail}`);
   }
   return res.json() as Promise<FinetuneJob>;
+}
+
+export function fetchEmbeddingJobs(): Promise<EmbeddingJob[]> {
+  return getJSON<EmbeddingJob[]>("/api/embedding-jobs");
+}
+
+export function fetchEmbeddingJob(jobId: string): Promise<EmbeddingJob> {
+  return getJSON<EmbeddingJob>(`/api/embedding-jobs/${encodeURIComponent(jobId)}`);
 }

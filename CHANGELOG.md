@@ -1,5 +1,16 @@
 ## Unreleased
 
+- **M10: Wire embedding_jobs into production.**
+  Migration `202606160002_embedding_jobs_finetune_link.sql` adds `finetune_job_id UUID REFERENCES finetune_jobs(id) ON DELETE SET NULL`
+  and index to `embedding_jobs`. Go: `internal/store/embedding.go` (`EmbeddingJobStore` interface + `PostgresEmbeddingJobStore`);
+  HTTP routes `GET /api/v1/embedding-jobs`, `GET /api/v1/embedding-jobs/{job_id}`; narrow `embeddingJobStorer` interface in handler,
+  `WithEmbeddingJobs` setter; `createFinetuneJob` creates linked embedding row (best-effort); gRPC `CompleteTask` hook calls
+  `UpdateEmbeddingJobOutcome` (best-effort) using parsed `FinetuneTaskOutput`; orchestrator wires `PostgresEmbeddingJobStore`
+  for both HTTP handler and gRPC server. Web: OpenAPI `EmbeddingJob` schema + `/embedding-jobs` paths; regenerated `api-types.ts`;
+  `EmbeddingJob` type alias; `fetchEmbeddingJobs`/`fetchEmbeddingJob` in `api.ts`; BFF routes `app/api/embedding-jobs/`;
+  `EmbeddingJobTable` component (query key `embedding-jobs`, staleTime 30s, metrics parsed from JSONB); `/embeddings` page; nav link.
+  4 new Go handler tests; 4 new web component tests.
+
 - **M9b: Production failure miner.**
   Migration `202606160001_finetune_jobs.sql` adds `finetune_jobs` table (run_id FK, status, metrics,
   outcome). Go: `internal/store/finetune.go` (`FinetuneJobStore` interface + `PostgresFinetuneJobStore`);
