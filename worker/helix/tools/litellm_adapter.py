@@ -20,6 +20,8 @@ from dataclasses import dataclass
 from typing import Any, cast
 
 from helix.logging import SpanLogger, new_id
+from helix.otel import OtelSpanExporter, is_configured
+from helix.runtime.context import current_eval_run_id
 from helix.tools.blob import BlobStore, maybe_offload
 from helix.tools.llm_cache import LLMCache, cache_enabled
 from helix.tools.rate_limit import RedisRateLimiter
@@ -27,6 +29,39 @@ from helix.tools.rate_limit import RedisRateLimiter
 _DEFAULT_MODEL = "claude-sonnet-4-20250514"
 _DEFAULT_NUM_RETRIES = 4
 _DEFAULT_LOGGER = SpanLogger()
+
+
+def _provider_from_model(model: str) -> str:
+    if model.startswith("claude"):
+        return "anthropic"
+    if model.startswith(("gpt-", "o1-", "o3-", "o4-", "text-")):
+        return "openai"
+    if model.startswith("gemini"):
+        return "google"
+    return "unknown"
+
+
+def _emit_llm_call_otel(attrs: dict[str, Any]) -> None:
+    """Emit a lightweight OTel span carrying finalized LLM call attrs.
+
+    Called after the SpanLogger span closes so all attrs are populated.
+    No-op when OTel is not configured (OTEL_EXPORTER_OTLP_ENDPOINT unset).
+    """
+    if not is_configured():
+        return
+    model = str(attrs.get("model", ""))
+    otel_attrs: dict[str, str] = {
+        "kind": "llm",
+        "model": model,
+        "provider": _provider_from_model(model),
+        "prompt_tokens": str(attrs.get("prompt_tokens", 0)),
+        "completion_tokens": str(attrs.get("completion_tokens", 0)),
+        "cost_usd": str(attrs.get("cost_usd", 0.0)),
+        "cache_hit": "true" if attrs.get("cache_hit") else "false",
+        "run_id": current_eval_run_id.get(),
+    }
+    with OtelSpanExporter("llm_call", otel_attrs):
+        pass
 
 
 def _span_payloads_enabled() -> bool:
@@ -178,4 +213,6 @@ async def llm_call(
             await maybe_offload(attrs, "prompt", json.dumps(messages), blob_store, payload_id)
             await maybe_offload(attrs, "completion", resp.text, blob_store, payload_id)
 
+    # Dual-write: emit OTel span for collector fan-out after JSONL span closes.
+    _emit_llm_call_otel(attrs)
     return resp

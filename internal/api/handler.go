@@ -44,17 +44,23 @@ type retrievalQuerier interface {
 	ListRetrievals(ctx context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error)
 }
 
+// llmCallQuerier reads LLM call rows from ClickHouse.
+type llmCallQuerier interface {
+	ListLlmCalls(ctx context.Context, runID string) ([]clickhouse.LlmCallQueryRow, error)
+}
+
 // Handler holds the dependencies for the REST API.
 type Handler struct {
-	store      store.Store
-	nats       dispatch.Publisher
-	logger     *slog.Logger
-	apiToken   string
+	store           store.Store
+	nats            dispatch.Publisher
+	logger          *slog.Logger
+	apiToken        string
 	spanReader      spanQuerier      // nil → trace endpoint returns 503
-	presigner       attrPresigner   // nil → blob URIs are omitted (not presigned)
-	evalWriter      evalWriter      // nil → eval write endpoint returns 503
-	evalReader      evalQuerier     // nil → eval read endpoints return 503
+	presigner       attrPresigner    // nil → blob URIs are omitted (not presigned)
+	evalWriter      evalWriter       // nil → eval write endpoint returns 503
+	evalReader      evalQuerier      // nil → eval read endpoints return 503
 	retrievalReader retrievalQuerier // nil → retrievals endpoint returns 503
+	llmCallReader   llmCallQuerier   // nil → llm-calls endpoint returns 503
 }
 
 // NewHandler constructs a Handler with the given dependencies.
@@ -90,6 +96,13 @@ func (h *Handler) WithRetrievals(r retrievalQuerier) *Handler {
 	return h
 }
 
+// WithLlmCalls adds ClickHouse LLM call reading to the handler.
+// Calling this enables GET /api/v1/llm-calls.
+func (h *Handler) WithLlmCalls(r llmCallQuerier) *Handler {
+	h.llmCallReader = r
+	return h
+}
+
 // Router returns an http.Handler with all API routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
@@ -107,6 +120,7 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/api/v1/evals/{eval_id}", h.getEval)
 
 	r.Get("/api/v1/retrievals", h.listRetrievals)
+	r.Get("/api/v1/llm-calls", h.listLlmCalls)
 
 	return r
 }
@@ -629,6 +643,54 @@ func (h *Handler) listRetrievals(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── llm-calls endpoint ────────────────────────────────────────────────────────
+
+// llmCallRowResponse is one row of GET /api/v1/llm-calls.
+type llmCallRowResponse struct {
+	TraceID          string    `json:"trace_id"`
+	SpanID           string    `json:"span_id"`
+	RunID            string    `json:"run_id"`
+	Provider         string    `json:"provider"`
+	Model            string    `json:"model"`
+	PromptTokens     uint32    `json:"prompt_tokens"`
+	CompletionTokens uint32    `json:"completion_tokens"`
+	TotalTokens      uint32    `json:"total_tokens"`
+	CostUSD          float64   `json:"cost_usd"`
+	StartTime        time.Time `json:"start_time"`
+	DurationMs       uint32    `json:"duration_ms"`
+	Status           string    `json:"status"`
+}
+
+// listLlmCalls handles GET /api/v1/llm-calls.
+// Returns 503 when ClickHouse is not configured (CLICKHOUSE_URL unset).
+func (h *Handler) listLlmCalls(w http.ResponseWriter, r *http.Request) {
+	if h.llmCallReader == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "llm-calls service not configured: CLICKHOUSE_URL is not set",
+		})
+		return
+	}
+	runID := r.URL.Query().Get("run_id")
+	rows, err := h.llmCallReader.ListLlmCalls(r.Context(), runID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "listLlmCalls: ListLlmCalls failed",
+			"run_id", runID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list llm calls"})
+		return
+	}
+	resp := make([]llmCallRowResponse, 0, len(rows))
+	for _, row := range rows {
+		resp = append(resp, llmCallRowResponse{
+			TraceID: row.TraceID, SpanID: row.SpanID, RunID: row.RunID,
+			Provider: row.Provider, Model: row.Model,
+			PromptTokens: row.PromptTokens, CompletionTokens: row.CompletionTokens,
+			TotalTokens: row.TotalTokens, CostUSD: row.CostUSD,
+			StartTime: row.StartTime, DurationMs: row.DurationMs, Status: row.Status,
+		})
+	}
 	writeJSON(w, http.StatusOK, resp)
 }
 

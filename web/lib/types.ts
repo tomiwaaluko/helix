@@ -13,3 +13,4 @@ export type ScorerMean = components["schemas"]["ScorerMean"];
 export type EvalSummary = components["schemas"]["EvalSummary"];
 export type EvalEvent = components["schemas"]["EvalEvent"];
 export type RetrievalRow = components["schemas"]["RetrievalRow"];
+export type LlmCallRow = components["schemas"]["LlmCallRow"];

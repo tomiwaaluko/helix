@@ -1,5 +1,23 @@
 ## Unreleased
 
+- **M8: LLM calls fan-out + cost dashboard.**
+  Python: `_provider_from_model()` derives provider string from model name prefix;
+  `_emit_llm_call_otel()` dual-writes a lightweight OTel span after each `llm_call` SpanLogger
+  span closes (no-op when OTel is unconfigured); `current_eval_run_id` contextvar propagated to
+  span attrs. 7 new Python tests (`test_llm_call_otel.py`).
+  Go: `internal/clickhouse/llm_call_writer.go` — `LlmCallWriter` (async buffered-channel, channel
+  size 1000, 200ms ticker, maxBatch 500); `llm_call_reader.go` — `LlmCallReader.ListLlmCalls`
+  (500-row limit, optional `run_id` filter). `internal/otlp/server.go` gains `llmCallSink`
+  interface, `WithLlmCalls()` setter, fan-out in `Export()` (gates on
+  `name=="llm_call" && kind=="llm"`), and `parseLlmCallRow()`.
+  `internal/api/handler.go` gains `llmCallQuerier` interface, `WithLlmCalls()` setter,
+  `GET /api/v1/llm-calls` handler (503 on nil reader, `?run_id=` filter).
+  `cmd/collector/main.go` wires `LlmCallWriter` + `.WithLlmCalls(lcw)`.
+  `cmd/orchestrator/main.go` wires `LlmCallReader` + `h.WithLlmCalls(lcr)`.
+  Web: `openapi.yaml` adds `LlmCallRow` schema + `/llm-calls` path; BFF route
+  `web/app/api/llm-calls/route.ts`; `LlmCallTable` client component; `/llm-calls` page;
+  "LLM Calls" nav link; "View LLM calls →" link from eval detail; 4 new web tests.
+
 - **M7: Retrievals fan-out + ClickHouse miner path + retrieval view.**
   Python: `current_eval_run_id` contextvar propagated from `evaluate()` to the retriever;
   `_emit_retrieval_otel()` dual-writes a lightweight OTel span for each `retrieve` call after

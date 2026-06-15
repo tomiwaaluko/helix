@@ -870,3 +870,106 @@ func TestListRetrievals_EmptyRunID_ReturnsAll(t *testing.T) {
 		t.Errorf("want listFn called with empty runID, got %q", calledWithRunID)
 	}
 }
+
+// ── GET /api/v1/llm-calls ─────────────────────────────────────────────────────
+
+type mockLlmCallQuerier struct {
+	listFn func(ctx context.Context, runID string) ([]clickhouse.LlmCallQueryRow, error)
+}
+
+func (m *mockLlmCallQuerier) ListLlmCalls(ctx context.Context, runID string) ([]clickhouse.LlmCallQueryRow, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, runID)
+	}
+	return []clickhouse.LlmCallQueryRow{}, nil
+}
+
+func newLlmCallHandler(s *testutil.MockStore, lq *mockLlmCallQuerier) http.Handler {
+	h := api.NewHandler(s, &testutil.MockPublisher{}, slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	if lq != nil {
+		h = h.WithLlmCalls(lq)
+	}
+	return h.Router()
+}
+
+func TestListLlmCalls_NilReader_Returns503(t *testing.T) {
+	// Handler without WithLlmCalls → 503.
+	h := newLlmCallHandler(&testutil.MockStore{}, nil)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/llm-calls", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestListLlmCalls_ReturnsTwoRows(t *testing.T) {
+	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	lq := &mockLlmCallQuerier{
+		listFn: func(_ context.Context, _ string) ([]clickhouse.LlmCallQueryRow, error) {
+			return []clickhouse.LlmCallQueryRow{
+				{
+					TraceID: "trace-1", SpanID: "span-1", RunID: "run-1",
+					Provider: "anthropic", Model: "claude-sonnet-4-20250514",
+					PromptTokens: 100, CompletionTokens: 50, TotalTokens: 150,
+					CostUSD: 0.001, StartTime: now, DurationMs: 500, Status: "ok",
+				},
+				{
+					TraceID: "trace-1", SpanID: "span-2", RunID: "run-1",
+					Provider: "openai", Model: "gpt-4o",
+					PromptTokens: 200, CompletionTokens: 80, TotalTokens: 280,
+					CostUSD: 0.005, StartTime: now, DurationMs: 800, Status: "ok",
+				},
+			}, nil
+		},
+	}
+	h := newLlmCallHandler(&testutil.MockStore{}, lq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/llm-calls", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp []struct {
+		Provider string  `json:"provider"`
+		Model    string  `json:"model"`
+		CostUSD  float64 `json:"cost_usd"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(resp))
+	}
+	if resp[0].Provider != "anthropic" {
+		t.Errorf("want provider=anthropic, got %q", resp[0].Provider)
+	}
+	if resp[0].Model != "claude-sonnet-4-20250514" {
+		t.Errorf("want model=claude-sonnet-4-20250514, got %q", resp[0].Model)
+	}
+	if resp[0].CostUSD != 0.001 {
+		t.Errorf("want cost_usd=0.001, got %f", resp[0].CostUSD)
+	}
+}
+
+func TestListLlmCalls_PassesRunIdParam(t *testing.T) {
+	var calledWithRunID string
+	lq := &mockLlmCallQuerier{
+		listFn: func(_ context.Context, runID string) ([]clickhouse.LlmCallQueryRow, error) {
+			calledWithRunID = runID
+			return []clickhouse.LlmCallQueryRow{}, nil
+		},
+	}
+	h := newLlmCallHandler(&testutil.MockStore{}, lq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/llm-calls?run_id=run-xyz", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if calledWithRunID != "run-xyz" {
+		t.Errorf("want listFn called with run-xyz, got %q", calledWithRunID)
+	}
+}

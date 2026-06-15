@@ -4,7 +4,9 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("fetchEvals", () => {
   it("calls /api/evals and returns parsed JSON", async () => {
-    const payload = [{ eval_id: "eval-1", examples: 5, started_at: "", finished_at: "", scorers: [] }];
+    const payload = [
+      { eval_id: "eval-1", examples: 5, started_at: "", finished_at: "", scorers: [] },
+    ];
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(payload), { status: 200 }),
     );
@@ -25,7 +27,16 @@ describe("fetchEvals", () => {
 
 describe("fetchEval", () => {
   it("calls /api/evals/:id and returns parsed JSON", async () => {
-    const payload = [{ eval_id: "eval-1", example_id: "ex_000", scorer: "exact", score: 1.0, passed: true, timestamp: "" }];
+    const payload = [
+      {
+        eval_id: "eval-1",
+        example_id: "ex_000",
+        scorer: "exact",
+        score: 1.0,
+        passed: true,
+        timestamp: "",
+      },
+    ];
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify(payload), { status: 200 }),
     );

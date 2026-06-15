@@ -29,11 +29,18 @@ type retrievalSink interface {
 	Write(chwriter.RetrievalRow)
 }
 
+// llmCallSink is the optional write interface for llm_call rows.
+// *chwriter.LlmCallWriter satisfies it.
+type llmCallSink interface {
+	Write(chwriter.LlmCallRow)
+}
+
 // Server implements the OTLP TraceService gRPC server.
 type Server struct {
 	collectorv1.UnimplementedTraceServiceServer
 	writer        spanSink
 	retrievalSink retrievalSink
+	llmCallSink   llmCallSink // optional fan-out to llm_calls table
 	logger        *slog.Logger
 }
 
@@ -46,6 +53,12 @@ func NewServer(w spanSink, log *slog.Logger) *Server {
 // retrieval rows to rw when a span with name="retrieve" and kind="retrieval" is received.
 func NewServerWithRetrieval(w spanSink, rw retrievalSink, log *slog.Logger) *Server {
 	return &Server{writer: w, retrievalSink: rw, logger: log}
+}
+
+// WithLlmCalls enables fan-out of llm_call spans to the llm_calls ClickHouse table.
+func (s *Server) WithLlmCalls(sink llmCallSink) *Server {
+	s.llmCallSink = sink
+	return s
 }
 
 // Export implements TraceServiceServer.Export.
@@ -108,6 +121,11 @@ func (s *Server) Export(
 					rr := parseRetrievalRow(row, attrs, span)
 					s.retrievalSink.Write(rr)
 				}
+
+				if s.llmCallSink != nil && span.GetName() == "llm_call" && attrs["kind"] == "llm" {
+					lc := parseLlmCallRow(row, attrs, span)
+					s.llmCallSink.Write(lc)
+				}
 			}
 		}
 	}
@@ -158,6 +176,41 @@ func parseRetrievalRow(sr chwriter.SpanRow, attrs map[string]string, span *trace
 		Results:        results,
 		StartTime:      sr.StartTime,
 		DurationMs:     durationMs,
+	}
+}
+
+// parseLlmCallRow constructs an LlmCallRow from a SpanRow plus its parsed attributes.
+func parseLlmCallRow(sr chwriter.SpanRow, attrs map[string]string, span *tracev1.Span) chwriter.LlmCallRow {
+	var promptTokens, completionTokens uint32
+	if v, err := strconv.ParseUint(attrs["prompt_tokens"], 10, 32); err == nil {
+		promptTokens = uint32(v)
+	}
+	if v, err := strconv.ParseUint(attrs["completion_tokens"], 10, 32); err == nil {
+		completionTokens = uint32(v)
+	}
+	var costUSD float64
+	if v, err := strconv.ParseFloat(attrs["cost_usd"], 64); err == nil {
+		costUSD = v
+	}
+	var durationMs uint32
+	end := span.GetEndTimeUnixNano()
+	start := span.GetStartTimeUnixNano()
+	if end > start {
+		durationMs = uint32((end - start) / 1_000_000)
+	}
+	return chwriter.LlmCallRow{
+		TraceID:          sr.TraceID,
+		SpanID:           sr.SpanID,
+		RunID:            sr.RunID,
+		Provider:         attrs["provider"],
+		Model:            attrs["model"],
+		PromptTokens:     promptTokens,
+		CompletionTokens: completionTokens,
+		TotalTokens:      promptTokens + completionTokens,
+		CostUSD:          costUSD,
+		StartTime:        sr.StartTime,
+		DurationMs:       durationMs,
+		Status:           sr.Status,
 	}
 }
 

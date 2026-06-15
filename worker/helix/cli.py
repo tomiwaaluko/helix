@@ -421,9 +421,7 @@ async def _finetune(
                     train_dataset, eval_results, corpus, ch_http_url=ch_http_url
                 )
             else:
-                cases = mine_failures(
-                    train_dataset, eval_results, corpus, spans_path=spans_path
-                )
+                cases = mine_failures(train_dataset, eval_results, corpus, spans_path=spans_path)
             await store.save_failure_cases([to_store_row(case) for case in cases])
             if not cases:
                 await store.update_embedding_job(job_id, status="archived")

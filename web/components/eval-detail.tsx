@@ -55,7 +55,9 @@ export function EvalDetail({ id }: { id: string }) {
 
   const scorerNames = Array.from(new Set(data.map((e: EvalEvent) => e.scorer))).sort();
   const metrics = scorerNames.map((scorer) => {
-    const scores = data.filter((e: EvalEvent) => e.scorer === scorer).map((e: EvalEvent) => e.score);
+    const scores = data
+      .filter((e: EvalEvent) => e.scorer === scorer)
+      .map((e: EvalEvent) => e.score);
     return { scorer, mean: mean(scores), n: scores.length };
   });
 
@@ -69,12 +71,18 @@ export function EvalDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center gap-4">
         <Link
           href={`/retrievals?run_id=${encodeURIComponent(id)}`}
           className="text-sm text-muted-foreground hover:text-foreground"
         >
           View retrievals →
+        </Link>
+        <Link
+          href={`/llm-calls?run_id=${encodeURIComponent(id)}`}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          View LLM calls →
         </Link>
       </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">

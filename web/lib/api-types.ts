@@ -89,6 +89,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/llm-calls": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List LLM call rows (most recent first, up to 500). Returns 503 when ClickHouse is not configured. */
+        get: operations["listLlmCalls"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals": {
         parameters: {
             query?: never;
@@ -211,6 +228,22 @@ export interface components {
             /** Format: date-time */
             start_time: string;
             duration_ms: number;
+        };
+        LlmCallRow: {
+            trace_id: string;
+            span_id: string;
+            run_id: string;
+            provider: string;
+            model: string;
+            prompt_tokens: number;
+            completion_tokens: number;
+            total_tokens: number;
+            /** Format: double */
+            cost_usd: number;
+            /** Format: date-time */
+            start_time: string;
+            duration_ms: number;
+            status?: string;
         };
         ErrorResponse: {
             error?: string;
@@ -401,6 +434,38 @@ export interface operations {
                 };
             };
             /** @description Retrieval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listLlmCalls: {
+        parameters: {
+            query?: {
+                /** @description Filter by eval run ID. Returns all runs when omitted. */
+                run_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description LLM call rows. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LlmCallRow"][];
+                };
+            };
+            /** @description LLM call service not configured (CLICKHOUSE_URL not set). */
             503: {
                 headers: {
                     [name: string]: unknown;

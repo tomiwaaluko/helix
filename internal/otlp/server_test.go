@@ -320,3 +320,97 @@ func TestExport_RetrievalSinkNil_DoesNotPanic(t *testing.T) {
 		t.Errorf("want 1 span row, got %d", len(sink.rows))
 	}
 }
+
+// ── llm call sink tests ───────────────────────────────────────────────────────
+
+// captureLlmCallSink records every LlmCallRow written to it.
+type captureLlmCallSink struct {
+	rows []chwriter.LlmCallRow
+}
+
+func (c *captureLlmCallSink) Write(row chwriter.LlmCallRow) {
+	c.rows = append(c.rows, row)
+}
+
+func TestExport_LlmCallSpan_CallsLlmCallSink(t *testing.T) {
+	sink := &captureSink{}
+	rsink := &captureRetrievalSink{}
+	lcSink := &captureLlmCallSink{}
+	srv := otlpserver.NewServerWithRetrieval(sink, rsink, discardLog()).WithLlmCalls(lcSink)
+
+	attrs := []*commonv1.KeyValue{
+		stringAttr("kind", "llm"),
+		stringAttr("model", "claude-sonnet-4-20250514"),
+		stringAttr("provider", "anthropic"),
+		stringAttr("prompt_tokens", "100"),
+		stringAttr("completion_tokens", "50"),
+		stringAttr("cost_usd", "0.001"),
+		stringAttr("run_id", "run-abc"),
+	}
+	req := retrievalSpanReq("llm_call", attrs)
+
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(lcSink.rows) != 1 {
+		t.Fatalf("want 1 llm call row, got %d", len(lcSink.rows))
+	}
+	row := lcSink.rows[0]
+	if row.Model != "claude-sonnet-4-20250514" {
+		t.Errorf("Model: want %q, got %q", "claude-sonnet-4-20250514", row.Model)
+	}
+	if row.Provider != "anthropic" {
+		t.Errorf("Provider: want %q, got %q", "anthropic", row.Provider)
+	}
+	if row.PromptTokens != 100 {
+		t.Errorf("PromptTokens: want 100, got %d", row.PromptTokens)
+	}
+	if row.TotalTokens != 150 {
+		t.Errorf("TotalTokens: want 150, got %d", row.TotalTokens)
+	}
+}
+
+func TestExport_NonLlmSpan_DoesNotCallLlmCallSink(t *testing.T) {
+	sink := &captureSink{}
+	rsink := &captureRetrievalSink{}
+	lcSink := &captureLlmCallSink{}
+	srv := otlpserver.NewServerWithRetrieval(sink, rsink, discardLog()).WithLlmCalls(lcSink)
+
+	req := retrievalSpanReq("retrieve", []*commonv1.KeyValue{
+		stringAttr("run_id", "run-1"),
+	})
+
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(lcSink.rows) != 0 {
+		t.Errorf("want 0 llm call rows, got %d", len(lcSink.rows))
+	}
+	// span still written to main sink
+	if len(sink.rows) != 1 {
+		t.Errorf("want 1 span row, got %d", len(sink.rows))
+	}
+}
+
+func TestExport_NilLlmCallSink_DoesNotPanic(t *testing.T) {
+	sink := &captureSink{}
+	// Use NewServer — llmCallSink is nil.
+	srv := otlpserver.NewServer(sink, discardLog())
+
+	attrs := []*commonv1.KeyValue{
+		stringAttr("kind", "llm"),
+		stringAttr("model", "claude-sonnet-4-20250514"),
+	}
+	req := retrievalSpanReq("llm_call", attrs)
+
+	// Must not panic.
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(sink.rows) != 1 {
+		t.Errorf("want 1 span row, got %d", len(sink.rows))
+	}
+}

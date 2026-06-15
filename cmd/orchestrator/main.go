@@ -90,6 +90,10 @@ func main() {
 			rr := clickhouse.NewRetrievalReader(chConn)
 			h = h.WithRetrievals(rr)
 			log.Info("retrieval endpoint enabled")
+
+			lcr := clickhouse.NewLlmCallReader(chConn)
+			h = h.WithLlmCalls(lcr)
+			log.Info("llm-calls endpoint enabled")
 		}
 	}
 

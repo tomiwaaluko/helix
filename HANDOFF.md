@@ -5,6 +5,42 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M8)
+
+**Last commit:** (see below — M8 commit pending)
+
+**Branch:** `claude/eloquent-clarke-qiha1x`
+
+**What shipped (M8):**
+- Python: `_provider_from_model()` + `_emit_llm_call_otel()` in `litellm_adapter.py`; 7 new tests in `test_llm_call_otel.py`
+- Go: `llm_call_writer.go` (async buffered writer), `llm_call_reader.go` (ListLlmCalls, 500 limit), `llm_call_writer_test.go` (5 tests)
+- Go: `server.go` — `llmCallSink` interface, `WithLlmCalls()` setter, fan-out, `parseLlmCallRow()`; 3 new `server_test.go` tests
+- Go: `handler.go` — `llmCallQuerier`, `WithLlmCalls()`, `GET /api/v1/llm-calls`; 3 new `handler_test.go` tests
+- Go: `cmd/collector/main.go` + `cmd/orchestrator/main.go` wired up
+- Web: `openapi.yaml` + `api-types.ts` regen + `LlmCallRow` alias + `fetchLlmCalls()` + BFF route + `LlmCallTable` component + `/llm-calls` page + nav link + eval-detail "View LLM calls →" + 4 web tests
+- All checks: 192 Python + 46 web + all Go tests pass; lint clean
+
+**What's next (M9 candidates):**
+- Eval events + LLM calls cost rollup in eval summary cards
+- Failure miner as a scheduled background task (M5 goal)
+- Full-stack integration test (`make test-integration`)
+- Helm/k8s packaging (M6)
+
+**Open questions:** None blocking.
+
+**Gotchas:**
+- `llm_call_writer_test.go` reuses `mockBatch`/`mockBatchConn` from `eval_writer_test.go` (same package `clickhouse`) — do not redefine them
+- `WithLlmCalls` is a setter on `Server` (not a new constructor) to avoid proliferating constructors alongside `NewServer` and `NewServerWithRetrieval`
+
+```
+git log -1 --oneline
+(commit not yet created — see below)
+git status
+(see working tree — all M8 changes uncommitted)
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M7)
 
 **Last commit:** 7987fb2 (pre-commit M7 plan doc; all M7 changes uncommitted — commit below)

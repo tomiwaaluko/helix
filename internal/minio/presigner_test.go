@@ -47,9 +47,9 @@ func TestPresignAttrs_NonS3Values_Preserved(t *testing.T) {
 	// A presigner with a nil client that won't be called because there are no s3:// values.
 	p := &Presigner{client: nil}
 	attrs := map[string]string{
-		"model":      "claude-sonnet-4-6",
-		"cache_hit":  "true",
-		"cost_usd":   "0.001234",
+		"model":     "claude-sonnet-4-6",
+		"cache_hit": "true",
+		"cost_usd":  "0.001234",
 	}
 	got, err := p.PresignAttrs(attrs, time.Hour)
 	if err != nil {

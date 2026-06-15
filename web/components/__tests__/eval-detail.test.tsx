@@ -67,9 +67,7 @@ describe("EvalDetail", () => {
   it("shows 503 message on service unavailable error", async () => {
     mockFetchEval.mockRejectedValue(new Error("request failed (503): clickhouse not set"));
     renderWithClient(<EvalDetail id="eval-1" />);
-    expect(
-      await screen.findByText(/ClickHouse is not configured/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/ClickHouse is not configured/)).toBeInTheDocument();
   });
 
   it("shows generic error on other failures", async () => {

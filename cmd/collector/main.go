@@ -53,12 +53,15 @@ func main() {
 	}
 	log.Info("clickhouse schema ready")
 
-	// 3. Create and start the BatchWriter and RetrievalWriter.
+	// 3. Create and start the BatchWriter, RetrievalWriter, and LlmCallWriter.
 	writer := ch.NewBatchWriter(conn, log)
 	writer.Start(ctx)
 
 	rw := ch.NewRetrievalWriter(conn, log)
 	rw.Start(ctx)
+
+	lcw := ch.NewLlmCallWriter(conn, log)
+	lcw.Start(ctx)
 
 	// 4. Register the OTLP TraceService on a gRPC server.
 	grpcAddr := fmt.Sprintf(":%d", otlpPort)
@@ -69,7 +72,8 @@ func main() {
 	}
 
 	grpcSrv := grpc.NewServer()
-	collectorv1.RegisterTraceServiceServer(grpcSrv, otlpserver.NewServerWithRetrieval(writer, rw, log))
+	collectorv1.RegisterTraceServiceServer(grpcSrv,
+		otlpserver.NewServerWithRetrieval(writer, rw, log).WithLlmCalls(lcw))
 
 	// 5. Serve in background.
 	go func() {
@@ -87,6 +91,7 @@ func main() {
 	grpcSrv.GracefulStop()
 	writer.Stop()
 	rw.Stop()
+	lcw.Stop()
 	log.Info("collector stopped")
 }
 

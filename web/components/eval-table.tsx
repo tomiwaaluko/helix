@@ -64,10 +64,7 @@ export function EvalTable() {
             return (
               <TableRow key={ev.eval_id}>
                 <TableCell>
-                  <Link
-                    href={`/evals/${ev.eval_id}`}
-                    className="font-mono text-sm hover:underline"
-                  >
+                  <Link href={`/evals/${ev.eval_id}`} className="font-mono text-sm hover:underline">
                     {ev.eval_id}
                   </Link>
                 </TableCell>
@@ -85,7 +82,10 @@ export function EvalTable() {
           })
         ) : (
           <TableRow>
-            <TableCell colSpan={3 + scorerNames.length} className="text-center text-muted-foreground">
+            <TableCell
+              colSpan={3 + scorerNames.length}
+              className="text-center text-muted-foreground"
+            >
               No eval runs yet.
             </TableCell>
           </TableRow>

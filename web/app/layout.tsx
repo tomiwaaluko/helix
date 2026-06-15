@@ -30,6 +30,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <Link href="/retrievals" className="hover:text-foreground">
                   Retrievals
                 </Link>
+                <Link href="/llm-calls" className="hover:text-foreground">
+                  LLM Calls
+                </Link>
               </nav>
             </div>
           </header>
