@@ -5,6 +5,42 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M9b integration test)
+
+**Last commit:** 7974e64 test(M9b): add finetune-job integration test for full NATS→worker→gRPC path
+
+**Working tree:** clean after commit
+
+**Current task:** M9b — now fully complete incl. DoD integration test
+
+**What shipped:**
+- `worker/tests/integration/test_finetune.py` — HELIX_INTEGRATION-gated, closes the M9b DoD gap
+  (`make test-integration` now exercises the full POST → NATS → worker → gRPC → Postgres path):
+  - `test_create_and_get_finetune_job` — POST 201 (run_id, status=pending) + GET by id + list
+  - `test_finetune_job_reaches_terminal_state` — polls 120s for worker to drive job to terminal
+  - `test_create_finetune_job_requires_splits` — missing splits → 400
+  - `test_finetune_auth_required` — unauthenticated → 401
+- `CHANGELOG.md` — M9b entry notes the integration test
+
+**What's next:** M10 (or next milestone per vertical-slice-plan.md)
+
+**Open questions:** None
+
+**Gotchas:**
+- The terminal-state test requires a worker on the `finetune_job` pool: `python -m helix.worker --pool finetune_job`. Jobs dispatch to the `finetune_job` NATS pool, not the default `research` pool.
+- With an empty ClickHouse the miner finds no failures → job lands on `no_failures` quickly (no training/GPU needed) — keeps the integration test cheap.
+- Tests skip when `HELIX_INTEGRATION` unset; also `pytest.skip` on 503 (orchestrator built without a finetune store).
+
+```
+git log -1 --oneline
+7974e64 test(M9b): add finetune-job integration test for full NATS→worker→gRPC path
+git status
+On branch claude/eloquent-clarke-qiha1x
+nothing to commit, working tree clean
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M9b)
 
 **Last commit:** 4955162 feat(M9b): production failure miner — finetune_jobs table, REST API, Python worker handler, web dashboard
