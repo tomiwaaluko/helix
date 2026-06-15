@@ -11,6 +11,9 @@
   Web: BFF routes `web/app/api/finetune-jobs/`, `FinetuneJobTable` component, `/finetune-jobs` page,
   nav link. OpenAPI schema updated with `FinetuneJob` + `CreateFinetuneJobRequest`.
   3 new Python worker tests; 7 new Go handler tests; 4 new web component tests.
+  Integration: `worker/tests/integration/test_finetune.py` (HELIX_INTEGRATION-gated) exercises the
+  full POST → NATS → worker → gRPC → Postgres path against a live orchestrator + a worker on the
+  `finetune_job` pool: create/get/list contract, terminal-state poll, missing-split 400, auth 401.
 
 - **M9a: Integration test suite.**
   Go: `internal/clickhouse/integration_test.go` (`//go:build integration`) — 6 tests covering
