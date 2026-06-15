@@ -39,16 +39,22 @@ type evalQuerier interface {
 	GetEval(ctx context.Context, evalID string) ([]clickhouse.EvalEventRow, error)
 }
 
+// retrievalQuerier reads retrieval rows from ClickHouse.
+type retrievalQuerier interface {
+	ListRetrievals(ctx context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error)
+}
+
 // Handler holds the dependencies for the REST API.
 type Handler struct {
 	store      store.Store
 	nats       dispatch.Publisher
 	logger     *slog.Logger
 	apiToken   string
-	spanReader spanQuerier   // nil → trace endpoint returns 503
-	presigner  attrPresigner // nil → blob URIs are omitted (not presigned)
-	evalWriter evalWriter    // nil → eval write endpoint returns 503
-	evalReader evalQuerier   // nil → eval read endpoints return 503
+	spanReader      spanQuerier      // nil → trace endpoint returns 503
+	presigner       attrPresigner   // nil → blob URIs are omitted (not presigned)
+	evalWriter      evalWriter      // nil → eval write endpoint returns 503
+	evalReader      evalQuerier     // nil → eval read endpoints return 503
+	retrievalReader retrievalQuerier // nil → retrievals endpoint returns 503
 }
 
 // NewHandler constructs a Handler with the given dependencies.
@@ -77,6 +83,13 @@ func (h *Handler) WithEvals(w evalWriter, r evalQuerier) *Handler {
 	return h
 }
 
+// WithRetrievals adds ClickHouse retrieval reading to the handler.
+// Calling this enables GET /api/v1/retrievals.
+func (h *Handler) WithRetrievals(r retrievalQuerier) *Handler {
+	h.retrievalReader = r
+	return h
+}
+
 // Router returns an http.Handler with all API routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
@@ -92,6 +105,8 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/api/v1/evals/{eval_id}/events", h.recordEvalEvents)
 	r.Get("/api/v1/evals", h.listEvals)
 	r.Get("/api/v1/evals/{eval_id}", h.getEval)
+
+	r.Get("/api/v1/retrievals", h.listRetrievals)
 
 	return r
 }
@@ -558,6 +573,59 @@ func (h *Handler) getEval(w http.ResponseWriter, r *http.Request) {
 			Passed:    e.Passed == 1,
 			Details:   e.Details,
 			Timestamp: e.Timestamp,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── retrievals endpoint ───────────────────────────────────────────────────────
+
+// retrievalRowResponse is one row of GET /api/v1/retrievals.
+type retrievalRowResponse struct {
+	TraceID    string    `json:"trace_id"`
+	SpanID     string    `json:"span_id"`
+	RunID      string    `json:"run_id"`
+	Query      string    `json:"query"`
+	Retriever  string    `json:"retriever"`
+	TopK       uint32    `json:"top_k"`
+	RecallAtK  uint8     `json:"recall_at_k"`
+	StartTime  time.Time `json:"start_time"`
+	DurationMs uint32    `json:"duration_ms"`
+}
+
+// listRetrievals handles GET /api/v1/retrievals.
+// Returns 503 when ClickHouse is not configured (CLICKHOUSE_URL unset).
+func (h *Handler) listRetrievals(w http.ResponseWriter, r *http.Request) {
+	if h.retrievalReader == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "retrieval service not configured: CLICKHOUSE_URL is not set",
+		})
+		return
+	}
+
+	runID := r.URL.Query().Get("run_id")
+
+	rows, err := h.retrievalReader.ListRetrievals(r.Context(), runID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "listRetrievals: ListRetrievals failed",
+			"run_id", runID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list retrievals"})
+		return
+	}
+
+	resp := make([]retrievalRowResponse, 0, len(rows))
+	for _, row := range rows {
+		resp = append(resp, retrievalRowResponse{
+			TraceID:    row.TraceID,
+			SpanID:     row.SpanID,
+			RunID:      row.RunID,
+			Query:      row.Query,
+			Retriever:  row.Retriever,
+			TopK:       row.TopK,
+			RecallAtK:  row.RecallAtK,
+			StartTime:  row.StartTime,
+			DurationMs: row.DurationMs,
 		})
 	}
 

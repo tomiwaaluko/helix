@@ -72,6 +72,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/retrievals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List retrieval rows (most recent first, up to 500). Returns 503 when ClickHouse is not configured. */
+        get: operations["listRetrievals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals": {
         parameters: {
             query?: never;
@@ -182,6 +199,18 @@ export interface components {
         TraceResponse: {
             trace_id: string;
             spans: components["schemas"]["SpanRecord"][];
+        };
+        RetrievalRow: {
+            trace_id: string;
+            span_id: string;
+            run_id: string;
+            query: string;
+            retriever: string;
+            top_k: number;
+            recall_at_k: number;
+            /** Format: date-time */
+            start_time: string;
+            duration_ms: number;
         };
         ErrorResponse: {
             error?: string;
@@ -346,6 +375,38 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CancelResponse"];
+                };
+            };
+        };
+    };
+    listRetrievals: {
+        parameters: {
+            query?: {
+                /** @description Filter by eval run ID. Returns all runs when omitted. */
+                run_id?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Retrieval rows. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetrievalRow"][];
+                };
+            };
+            /** @description Retrieval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

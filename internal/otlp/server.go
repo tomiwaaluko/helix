@@ -5,7 +5,9 @@ package otlp
 import (
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"log/slog"
+	"strconv"
 	"time"
 
 	collectorv1 "go.opentelemetry.io/proto/otlp/collector/trace/v1"
@@ -21,16 +23,29 @@ type spanSink interface {
 	Write(chwriter.SpanRow)
 }
 
+// retrievalSink is the optional write interface for retrieval rows.
+// *chwriter.RetrievalWriter satisfies it.
+type retrievalSink interface {
+	Write(chwriter.RetrievalRow)
+}
+
 // Server implements the OTLP TraceService gRPC server.
 type Server struct {
 	collectorv1.UnimplementedTraceServiceServer
-	writer spanSink
-	logger *slog.Logger
+	writer        spanSink
+	retrievalSink retrievalSink
+	logger        *slog.Logger
 }
 
 // NewServer creates a new Server that writes spans to w.
 func NewServer(w spanSink, log *slog.Logger) *Server {
 	return &Server{writer: w, logger: log}
+}
+
+// NewServerWithRetrieval creates a new Server that writes spans to w and
+// retrieval rows to rw when a span with name="retrieve" and kind="retrieval" is received.
+func NewServerWithRetrieval(w spanSink, rw retrievalSink, log *slog.Logger) *Server {
+	return &Server{writer: w, retrievalSink: rw, logger: log}
 }
 
 // Export implements TraceServiceServer.Export.
@@ -88,11 +103,62 @@ func (s *Server) Export(
 				}
 
 				s.writer.Write(row)
+
+				if s.retrievalSink != nil && span.GetName() == "retrieve" && attrs["kind"] == "retrieval" {
+					rr := parseRetrievalRow(row, attrs, span)
+					s.retrievalSink.Write(rr)
+				}
 			}
 		}
 	}
 
 	return &collectorv1.ExportTraceServiceResponse{}, nil
+}
+
+// parseRetrievalRow constructs a RetrievalRow from a SpanRow plus its parsed attributes.
+func parseRetrievalRow(sr chwriter.SpanRow, attrs map[string]string, span *tracev1.Span) chwriter.RetrievalRow {
+	var topK uint32
+	if v, err := strconv.ParseUint(attrs["top_k"], 10, 32); err == nil {
+		topK = uint32(v)
+	}
+
+	// Parse results JSON: [{doc_id, score}, ...]
+	type resultEntry struct {
+		DocID string  `json:"doc_id"`
+		Score float32 `json:"score"`
+	}
+	var entries []resultEntry
+	if raw := attrs["results"]; raw != "" {
+		_ = json.Unmarshal([]byte(raw), &entries)
+	}
+	results := make([]chwriter.ResultTuple, 0, len(entries))
+	for i, e := range entries {
+		results = append(results, chwriter.ResultTuple{
+			PassageID: e.DocID,
+			Score:     e.Score,
+			Rank:      uint32(i + 1),
+		})
+	}
+
+	var durationMs uint32
+	end := span.GetEndTimeUnixNano()
+	start := span.GetStartTimeUnixNano()
+	if end > start {
+		durationMs = uint32((end - start) / 1_000_000)
+	}
+
+	return chwriter.RetrievalRow{
+		TraceID:        sr.TraceID,
+		SpanID:         sr.SpanID,
+		RunID:          sr.RunID,
+		Query:          attrs["query"],
+		QueryEmbedding: []float32{},
+		Retriever:      attrs["retriever"],
+		TopK:           topK,
+		Results:        results,
+		StartTime:      sr.StartTime,
+		DurationMs:     durationMs,
+	}
 }
 
 // attributesToMap converts a slice of OTLP KeyValue attributes to a flat

@@ -27,6 +27,9 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <Link href="/evals" className="hover:text-foreground">
                   Evals
                 </Link>
+                <Link href="/retrievals" className="hover:text-foreground">
+                  Retrievals
+                </Link>
               </nav>
             </div>
           </header>

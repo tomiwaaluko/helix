@@ -12,3 +12,4 @@ export type TraceResponse = components["schemas"]["TraceResponse"];
 export type ScorerMean = components["schemas"]["ScorerMean"];
 export type EvalSummary = components["schemas"]["EvalSummary"];
 export type EvalEvent = components["schemas"]["EvalEvent"];
+export type RetrievalRow = components["schemas"]["RetrievalRow"];

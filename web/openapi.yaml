@@ -97,6 +97,31 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CancelResponse"
+  /retrievals:
+    get:
+      operationId: listRetrievals
+      summary: List retrieval rows (most recent first, up to 500). Returns 503 when ClickHouse is not configured.
+      parameters:
+        - in: query
+          name: run_id
+          schema:
+            type: string
+          description: Filter by eval run ID. Returns all runs when omitted.
+      responses:
+        "200":
+          description: Retrieval rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetrievalRow"
+        "503":
+          description: Retrieval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /evals:
     get:
       operationId: listEvals
@@ -291,6 +316,29 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SpanRecord"
+    RetrievalRow:
+      type: object
+      required: [trace_id, span_id, run_id, query, retriever, top_k, recall_at_k, start_time, duration_ms]
+      properties:
+        trace_id:
+          type: string
+        span_id:
+          type: string
+        run_id:
+          type: string
+        query:
+          type: string
+        retriever:
+          type: string
+        top_k:
+          type: integer
+        recall_at_k:
+          type: integer
+        start_time:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
     ErrorResponse:
       type: object
       properties:

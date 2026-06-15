@@ -5,6 +5,48 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M7)
+
+**Last commit:** 7987fb2 (pre-commit M7 plan doc; all M7 changes uncommitted — commit below)
+**Working tree:** 19 modified files, 10 new files (see git status)
+
+**Task plan position:** M7 complete per `docs/m7-plan.md`.
+
+**What shipped this session**
+
+- **M7: Retrievals fan-out + ClickHouse miner path + retrieval view:**
+  - Python: `worker/helix/runtime/context.py` — `current_eval_run_id: ContextVar[str]` added
+  - Python: `worker/helix/otel.py` — `is_configured()` function added
+  - Python: `worker/helix/eval/harness.py` — `run_one()` sets/resets `current_eval_run_id`
+  - Python: `worker/helix/rag/retriever.py` — `_emit_retrieval_otel()` dual-writes OTel span after SpanLogger span closes; `current_eval_run_id.get()` fills `run_id` attr
+  - Python: `worker/helix/rag/miner/miner.py` — `_ch_query()` httpx helper + `mine_from_clickhouse()` async function; Array(Tuple) → doc_id+score parsing
+  - Python: `worker/helix/cli.py` — `_finetune` routes to `mine_from_clickhouse` when `CLICKHOUSE_HTTP_URL` is set
+  - Python tests: 3 OTel retriever tests + 4 ClickHouse miner tests; 185 passed, 6 skipped
+  - Go (new files): `internal/clickhouse/retrieval_writer.go` (RetrievalWriter, ResultTuple, RetrievalRow), `retrieval_reader.go` (RetrievalReader, ListRetrievals), `retrieval_writer_test.go` (5 tests)
+  - Go (modified): `internal/otlp/server.go` — retrievalSink interface, NewServerWithRetrieval, parseRetrievalRow; `server_test.go` — 3 new tests
+  - Go (modified): `internal/api/handler.go` — retrievalQuerier interface, WithRetrievals setter, GET /api/v1/retrievals; `handler_test.go` — 3 new tests
+  - Go (modified): `cmd/collector/main.go` — RetrievalWriter + NewServerWithRetrieval + rw.Stop(); `cmd/orchestrator/main.go` — WithRetrievals wired
+  - Web: `web/openapi.yaml` — RetrievalRow schema + /retrievals path; `npm run gen:types` regenerated `api-types.ts`
+  - Web: BFF route `web/app/api/retrievals/route.ts` (proxies with `?run_id=` passthrough)
+  - Web: `<RetrievalTable>` component; `/retrievals` page; "Retrievals" nav link; "View retrievals →" link in `eval-detail.tsx`
+  - Web tests: 4 new vitest tests; all 42 tests pass
+  - `CHANGELOG.md` updated
+
+**Verification:** `go build ./...` ✓, `go test ./internal/...` ✓ (all cached green), `python pytest` 185 passed, `npm run test` 42 passed, `ruff check` ✓, `mypy --strict` ✓
+
+**What's next:** M8 — embedding fine-tuning loop (trainer, promotion/alias-swap, canary eval) per `docs/vertical-slice-plan.md`.
+
+**Open questions / gotchas:**
+- `mine_from_clickhouse` uses `CLICKHOUSE_HTTP_URL` (port 8123 HTTP). Separate from `CLICKHOUSE_URL` (port 9000 native TCP, Go-only). `docker-compose` does not expose 8123 yet — must be added when wiring up production mining.
+- `RetrievalWriter` uses same `Open()` connection as `BatchWriter` in collector (shared `async_insert=1`). Retrieval telemetry is fire-and-forget; if the buffer fills, rows are dropped with a `Warn` log.
+
+```
+7987fb2 docs(m7): draft M7 plan — retrievals fan-out, ClickHouse miner path, retrieval view
+(M7 implementation uncommitted at session end — commit and push before handing off)
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M6)
 
 **Last commit:** e933564 feat(m6): eval views slice — write path, REST endpoints, dashboard pages

@@ -32,6 +32,11 @@ _log = logging.getLogger(__name__)
 _configured: bool = False
 
 
+def is_configured() -> bool:
+    """Return True after configure_otel() has been called with a live endpoint."""
+    return _configured
+
+
 def configure_otel(endpoint: str | None) -> None:
     """Wire up the global OTel TracerProvider.
 

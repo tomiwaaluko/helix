@@ -39,7 +39,7 @@ from helix.eval.scorers import (
 from helix.logging import SpanLogger
 from helix.rag.chunker import Chunk, TokenCounter, chunk_document
 from helix.rag.indexer import IndexResult, index_corpus
-from helix.rag.miner.miner import mine_failures, to_store_row
+from helix.rag.miner.miner import mine_failures, mine_from_clickhouse, to_store_row
 from helix.rag.promotion.promote import (
     IndexFn,
     PromoteConfig,
@@ -415,7 +415,15 @@ async def _finetune(
                 )
             skipped = report.examples_skipped
             eval_results = await store.get_eval_results(report.eval_id)
-            cases = mine_failures(train_dataset, eval_results, corpus, spans_path=spans_path)
+            ch_http_url = os.environ.get("CLICKHOUSE_HTTP_URL", "")
+            if ch_http_url:
+                cases = await mine_from_clickhouse(
+                    train_dataset, eval_results, corpus, ch_http_url=ch_http_url
+                )
+            else:
+                cases = mine_failures(
+                    train_dataset, eval_results, corpus, spans_path=spans_path
+                )
             await store.save_failure_cases([to_store_row(case) for case in cases])
             if not cases:
                 await store.update_embedding_job(job_id, status="archived")

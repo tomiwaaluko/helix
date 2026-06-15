@@ -751,3 +751,122 @@ func TestGetEval_ReaderError_Returns500(t *testing.T) {
 		t.Fatalf("want 500, got %d", w.Code)
 	}
 }
+
+// ── GET /api/v1/retrievals ────────────────────────────────────────────────────
+
+type mockRetrievalQuerier struct {
+	listFn func(ctx context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error)
+}
+
+func (m *mockRetrievalQuerier) ListRetrievals(ctx context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx, runID)
+	}
+	return []clickhouse.RetrievalQueryRow{}, nil
+}
+
+func newRetrievalHandler(rq *mockRetrievalQuerier) http.Handler {
+	h := api.NewHandler(&testutil.MockStore{}, &testutil.MockPublisher{}, slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	if rq != nil {
+		h = h.WithRetrievals(rq)
+	}
+	return h.Router()
+}
+
+func TestListRetrievals_NilReader_Returns503(t *testing.T) {
+	// Handler without WithRetrievals → 503.
+	h := newRetrievalHandler(nil)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/retrievals", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestListRetrievals_HappyPath_ReturnsRows(t *testing.T) {
+	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	rq := &mockRetrievalQuerier{
+		listFn: func(_ context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error) {
+			return []clickhouse.RetrievalQueryRow{
+				{
+					TraceID:    "trace-1",
+					SpanID:     "span-1",
+					RunID:      runID,
+					Query:      "what is helix?",
+					Retriever:  "qdrant",
+					TopK:       10,
+					RecallAtK:  1,
+					StartTime:  now,
+					DurationMs: 42,
+				},
+				{
+					TraceID:    "trace-1",
+					SpanID:     "span-2",
+					RunID:      runID,
+					Query:      "distributed systems",
+					Retriever:  "qdrant",
+					TopK:       5,
+					RecallAtK:  0,
+					StartTime:  now,
+					DurationMs: 30,
+				},
+			}, nil
+		},
+	}
+	h := newRetrievalHandler(rq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/retrievals?run_id=run-xyz", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp []struct {
+		TraceID   string `json:"trace_id"`
+		SpanID    string `json:"span_id"`
+		RunID     string `json:"run_id"`
+		Query     string `json:"query"`
+		Retriever string `json:"retriever"`
+		TopK      uint32 `json:"top_k"`
+		RecallAtK uint8  `json:"recall_at_k"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("want 2 rows, got %d", len(resp))
+	}
+	if resp[0].Query != "what is helix?" {
+		t.Errorf("want query=%q, got %q", "what is helix?", resp[0].Query)
+	}
+	if resp[0].RecallAtK != 1 {
+		t.Errorf("want recall_at_k=1, got %d", resp[0].RecallAtK)
+	}
+	if resp[1].TopK != 5 {
+		t.Errorf("want top_k=5, got %d", resp[1].TopK)
+	}
+}
+
+func TestListRetrievals_EmptyRunID_ReturnsAll(t *testing.T) {
+	var calledWithRunID string
+	rq := &mockRetrievalQuerier{
+		listFn: func(_ context.Context, runID string) ([]clickhouse.RetrievalQueryRow, error) {
+			calledWithRunID = runID
+			return []clickhouse.RetrievalQueryRow{}, nil
+		},
+	}
+	h := newRetrievalHandler(rq)
+	// Call without run_id param.
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/retrievals", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	if calledWithRunID != "" {
+		t.Errorf("want listFn called with empty runID, got %q", calledWithRunID)
+	}
+}

@@ -86,6 +86,10 @@ func main() {
 			er := clickhouse.NewEvalReader(chConn)
 			h = h.WithEvals(ew, er)
 			log.Info("eval endpoints enabled")
+
+			rr := clickhouse.NewRetrievalReader(chConn)
+			h = h.WithRetrievals(rr)
+			log.Info("retrieval endpoint enabled")
 		}
 	}
 

@@ -7,13 +7,22 @@ the cross-encoder and the top-k returned as ``Doc``s.
 
 Each returned ``Doc`` carries ``metadata["doc_id"]`` so the workflow can populate
 ``Answer.metadata["retrieved_doc_ids"]`` for the recall scorer.
+
+When the OTel SDK is configured (``OTEL_EXPORTER_OTLP_ENDPOINT`` is set), each
+``retrieve`` call also emits a lightweight OTel span so the Go collector can fan
+the data into the ClickHouse ``retrievals`` table for dashboard visibility and
+offline mining via ``mine_from_clickhouse``.
 """
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
+from typing import Any
 
 from helix.logging import SpanLogger
+from helix.otel import OtelSpanExporter, is_configured
+from helix.runtime.context import current_eval_run_id
 from helix.tools.bm25 import BM25Index
 from helix.tools.embedder import Embedder
 from helix.tools.qdrant_adapter import QdrantAdapter
@@ -44,6 +53,28 @@ def _rrf_fuse(
             scores[chunk_id] = scores.get(chunk_id, 0.0) + 1.0 / (k + rank)
             candidates.setdefault(chunk_id, _Candidate(chunk_id, doc_id, text, source))
     return sorted(candidates.values(), key=lambda c: scores[c.chunk_id], reverse=True)
+
+
+def _emit_retrieval_otel(attrs: dict[str, Any]) -> None:
+    """Emit a lightweight OTel span carrying finalized retrieval attrs.
+
+    Called after the SpanLogger span closes so all attrs are populated.
+    No-op when OTel is not configured (OTEL_EXPORTER_OTLP_ENDPOINT unset).
+    The span duration is near-zero — it exists purely as a structured event for
+    the collector's retrieval fan-out, not as a performance trace.
+    """
+    if not is_configured():
+        return
+    otel_attrs: dict[str, str] = {
+        "kind": "retrieval",
+        "query": str(attrs.get("query", "")),
+        "retriever": str(attrs.get("retriever", "")),
+        "top_k": str(attrs.get("top_k", 0)),
+        "results": json.dumps(attrs.get("results", [])),
+        "run_id": current_eval_run_id.get(),
+    }
+    with OtelSpanExporter("retrieve", otel_attrs):
+        pass
 
 
 class HybridRetriever:
@@ -120,4 +151,7 @@ class HybridRetriever:
                 }
                 for d in docs
             ]
+
+        # Dual-write: emit OTel span for collector fan-out after JSONL span closes.
+        _emit_retrieval_otel(attrs)
         return docs

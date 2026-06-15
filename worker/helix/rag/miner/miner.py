@@ -40,11 +40,14 @@ same corpus dict.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from os import PathLike
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 from helix.eval.harness import Example
 from helix.logging import new_id
@@ -230,6 +233,107 @@ def mine_failures(
             )
 
     return cases
+
+
+_log = logging.getLogger(__name__)
+
+_CH_HTTP_URL_ENV = "CLICKHOUSE_HTTP_URL"
+
+
+async def _ch_query(http_url: str, sql: str) -> list[dict[str, Any]]:
+    """Run a SQL query against ClickHouse HTTP interface, return parsed JSONEachRow."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.post(
+            http_url,
+            content=(sql + " FORMAT JSONEachRow").encode(),
+            headers={"Content-Type": "text/plain"},
+        )
+        resp.raise_for_status()
+    rows: list[dict[str, Any]] = []
+    for line in resp.text.splitlines():
+        stripped = line.strip()
+        if stripped:
+            rows.append(json.loads(stripped))
+    return rows
+
+
+async def mine_from_clickhouse(
+    examples: list[Example],
+    eval_results: list[EvalResultRow],
+    corpus: dict[str, str],
+    *,
+    ch_http_url: str,
+    recall_scorer: str = _RECALL_SCORER,
+    max_hard_negatives: int = 4,
+) -> list[FailureCase]:
+    """Mine retrieval failures from ClickHouse ``spans`` + ``retrievals`` tables.
+
+    Queries ClickHouse via its HTTP interface (``CLICKHOUSE_HTTP_URL``).
+    The resulting ``FailureCase`` list is identical in shape to the output of
+    ``mine_failures`` run over the equivalent JSONL spans.
+
+    Requires:
+    - The Go collector is running and has populated the ``spans`` table with
+      ``name='deep_research'`` workflow spans (OTel integration active).
+    - M7 retrieval fan-out has populated the ``retrievals`` table.
+    """
+    # Query workflow spans for question → trace_id mapping.
+    wf_sql = (
+        "SELECT trace_id, attributes['question'] AS question"
+        " FROM spans WHERE name = 'deep_research'"
+    )
+    wf_rows = await _ch_query(ch_http_url, wf_sql)
+    workflow_spans: list[dict[str, Any]] = [
+        {
+            "trace_id": row["trace_id"],
+            "kind": "workflow",
+            "name": "deep_research",
+            "attributes": {"question": row.get("question", "")},
+        }
+        for row in wf_rows
+        if row.get("question")
+    ]
+
+    # Query retrievals table.
+    ret_rows = await _ch_query(
+        ch_http_url,
+        "SELECT trace_id, span_id, query, results FROM retrievals",
+    )
+    retrieval_spans: list[dict[str, Any]] = []
+    for row in ret_rows:
+        # ClickHouse Array(Tuple(passage_id, score, rank)) → JSONEachRow: [[id, score, rank], ...]
+        raw: list[Any] = row.get("results", [])
+        results = [
+            {"doc_id": str(r[0]), "score": float(r[1])}
+            for r in raw
+            if isinstance(r, (list, tuple)) and len(r) >= 2
+        ]
+        retrieval_spans.append(
+            {
+                "trace_id": row.get("trace_id", ""),
+                "span_id": row.get("span_id", ""),
+                "kind": "retrieval",
+                "name": "retrieve",
+                "attributes": {
+                    "query": row.get("query", ""),
+                    "results": results,
+                },
+            }
+        )
+
+    if not workflow_spans:
+        _log.warning("mine_from_clickhouse: no workflow spans found in ClickHouse — returning []")
+        return []
+
+    all_spans = workflow_spans + retrieval_spans
+    return mine_failures(
+        examples,
+        eval_results,
+        corpus,
+        spans=all_spans,
+        recall_scorer=recall_scorer,
+        max_hard_negatives=max_hard_negatives,
+    )
 
 
 def to_store_row(case: FailureCase, *, case_id: str | None = None) -> FailureCaseRow:

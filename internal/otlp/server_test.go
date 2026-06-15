@@ -205,3 +205,118 @@ func TestExport_NilStatus_DefaultsToUnset(t *testing.T) {
 		}
 	}
 }
+
+// ── retrieval sink tests ──────────────────────────────────────────────────────
+
+// captureRetrievalSink records every RetrievalRow written to it.
+type captureRetrievalSink struct {
+	rows []chwriter.RetrievalRow
+}
+
+func (c *captureRetrievalSink) Write(row chwriter.RetrievalRow) {
+	c.rows = append(c.rows, row)
+}
+
+func retrievalSpanReq(name string, attrs []*commonv1.KeyValue) *collectorv1.ExportTraceServiceRequest {
+	return &collectorv1.ExportTraceServiceRequest{
+		ResourceSpans: []*tracev1.ResourceSpans{
+			{
+				ScopeSpans: []*tracev1.ScopeSpans{
+					{
+						Spans: []*tracev1.Span{
+							{
+								Name:              name,
+								StartTimeUnixNano: uint64(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC).UnixNano()),
+								EndTimeUnixNano:   uint64(time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC).UnixNano()) + 5_000_000,
+								Attributes:        attrs,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
+func TestExport_RetrievalSpan_CallsRetrievalSink(t *testing.T) {
+	sink := &captureSink{}
+	rsink := &captureRetrievalSink{}
+	srv := otlpserver.NewServerWithRetrieval(sink, rsink, discardLog())
+
+	attrs := []*commonv1.KeyValue{
+		stringAttr("kind", "retrieval"),
+		stringAttr("query", "foo"),
+		stringAttr("retriever", "qdrant"),
+		stringAttr("top_k", "3"),
+		stringAttr("results", `[{"doc_id":"d1","score":0.9}]`),
+		stringAttr("run_id", "run-abc"),
+	}
+	req := retrievalSpanReq("retrieve", attrs)
+
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(rsink.rows) != 1 {
+		t.Fatalf("want 1 retrieval row, got %d", len(rsink.rows))
+	}
+	row := rsink.rows[0]
+	if row.Query != "foo" {
+		t.Errorf("Query: want %q, got %q", "foo", row.Query)
+	}
+	if len(row.Results) != 1 {
+		t.Fatalf("Results: want 1 entry, got %d", len(row.Results))
+	}
+	if row.Results[0].PassageID != "d1" {
+		t.Errorf("Results[0].PassageID: want %q, got %q", "d1", row.Results[0].PassageID)
+	}
+	if row.TopK != 3 {
+		t.Errorf("TopK: want 3, got %d", row.TopK)
+	}
+	if row.RunID != "run-abc" {
+		t.Errorf("RunID: want %q, got %q", "run-abc", row.RunID)
+	}
+}
+
+func TestExport_NonRetrievalSpan_DoesNotCallRetrievalSink(t *testing.T) {
+	sink := &captureSink{}
+	rsink := &captureRetrievalSink{}
+	srv := otlpserver.NewServerWithRetrieval(sink, rsink, discardLog())
+
+	req := retrievalSpanReq("deep_research", []*commonv1.KeyValue{
+		stringAttr("run_id", "run-1"),
+	})
+
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(rsink.rows) != 0 {
+		t.Errorf("want 0 retrieval rows, got %d", len(rsink.rows))
+	}
+	// span still written to main sink
+	if len(sink.rows) != 1 {
+		t.Errorf("want 1 span row, got %d", len(sink.rows))
+	}
+}
+
+func TestExport_RetrievalSinkNil_DoesNotPanic(t *testing.T) {
+	sink := &captureSink{}
+	// Use NewServer (not NewServerWithRetrieval) — retrievalSink is nil.
+	srv := otlpserver.NewServer(sink, discardLog())
+
+	attrs := []*commonv1.KeyValue{
+		stringAttr("kind", "retrieval"),
+		stringAttr("query", "foo"),
+	}
+	req := retrievalSpanReq("retrieve", attrs)
+
+	// Must not panic.
+	_, err := srv.Export(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Export: %v", err)
+	}
+	if len(sink.rows) != 1 {
+		t.Errorf("want 1 span row, got %d", len(sink.rows))
+	}
+}

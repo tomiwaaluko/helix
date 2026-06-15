@@ -1,5 +1,31 @@
 ## Unreleased
 
+- **M7: Retrievals fan-out + ClickHouse miner path + retrieval view.**
+  Python: `current_eval_run_id` contextvar propagated from `evaluate()` to the retriever;
+  `_emit_retrieval_otel()` dual-writes a lightweight OTel span for each `retrieve` call after
+  the `SpanLogger` span closes (no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` unset).
+  `mine_from_clickhouse()` queries ClickHouse HTTP API (`CLICKHOUSE_HTTP_URL`) for workflow
+  and retrieval spans, builds synthetic span dicts, and routes through the existing
+  `mine_failures()` — no new deps (uses existing `httpx`). `_finetune` in `cli.py`
+  routes to `mine_from_clickhouse` when `CLICKHOUSE_HTTP_URL` is set, else falls back to JSONL.
+  7 new Python tests (`test_retriever_otel.py` × 3, `test_miner_clickhouse.py` × 4).
+  Go: `internal/clickhouse/retrieval_writer.go` — `RetrievalWriter` (async buffered-channel,
+  same pattern as `BatchWriter`), exported `ResultTuple`; `retrieval_reader.go` —
+  `RetrievalReader.ListRetrievals` (parameterized vs. global, 500-row limit).
+  `internal/otlp/server.go` gains `retrievalSink` interface, `NewServerWithRetrieval` constructor,
+  fan-out logic in `Export` (gates on `name=="retrieve" && kind=="retrieval"`), and
+  `parseRetrievalRow` (JSON results → `[]ResultTuple`, duration from nano timestamps).
+  `internal/api/handler.go` gains `retrievalQuerier` interface, `WithRetrievals` setter,
+  `GET /api/v1/retrievals` handler (503 on nil reader, `?run_id=` filter).
+  `cmd/collector/main.go` wires `RetrievalWriter` + `NewServerWithRetrieval`.
+  `cmd/orchestrator/main.go` wires `WithRetrievals`. 8 new Go tests.
+  Dashboard: `/retrievals` page with `<RetrievalTable>` (query, retriever, top-k, recall@k,
+  run ID, timestamp, duration; `staleTime: Infinity`, 503-tolerant error UX).
+  BFF route `web/app/api/retrievals/route.ts` proxies `GET /api/v1/retrievals?run_id=…`.
+  `eval-detail.tsx` gains "View retrievals →" link. Nav updated. `web/openapi.yaml`
+  extended with `RetrievalRow` schema and `/retrievals` path; types regenerated.
+  4 new vitest tests.
+
 - **M6: Eval views slice landed.**
   Go: `POST /api/v1/evals/{eval_id}/events` persists per-example scores to ClickHouse
   synchronously (overrides connection-level `async_insert=1` with per-query `async_insert=0`);

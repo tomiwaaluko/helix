@@ -25,6 +25,7 @@ from typing import Any
 
 from helix.eval.reporter import EvalReporter
 from helix.logging import new_id
+from helix.runtime.context import current_eval_run_id
 from helix.runtime.sqlite_store import SqliteStore
 
 HOLDOUT_DATASET_PATH = "evals/datasets/hotpotqa_dev_holdout_500.jsonl"
@@ -196,34 +197,38 @@ async def evaluate(
         raise AssertionError("unreachable")  # pragma: no cover
 
     async def run_one(example: Example) -> dict[str, Any] | None:
+        token = current_eval_run_id.set(run_id)
         try:
-            output = await _run_workflow_with_retries(example)
-        except Exception:
-            if not tolerate_failures:
-                raise
-            return None
-        scores: dict[str, float] = {}
-        events: list[dict[str, object]] = []
-        for name, scorer in scorers.items():
-            score, details = _as_score(scorer(example, output))
-            scores[name] = score
-            if store is not None:
-                await store.store_eval_result(run_id, example.id, name, score, details)
-            events.append(
-                {
-                    "example_id": example.id,
-                    "run_id": "",
-                    "scorer": name,
-                    "score": score,
-                    "passed": score >= 1.0,
-                    "details": details or {},
-                }
-            )
-        if reporter is not None:
-            # Best-effort: the reporter swallows its own errors; the SQLite store
-            # above holds the authoritative results regardless.
-            await reporter.record(run_id, events)
-        return {"example_id": example.id, "scores": scores}
+            try:
+                output = await _run_workflow_with_retries(example)
+            except Exception:
+                if not tolerate_failures:
+                    raise
+                return None
+            scores: dict[str, float] = {}
+            events: list[dict[str, object]] = []
+            for name, scorer in scorers.items():
+                score, details = _as_score(scorer(example, output))
+                scores[name] = score
+                if store is not None:
+                    await store.store_eval_result(run_id, example.id, name, score, details)
+                events.append(
+                    {
+                        "example_id": example.id,
+                        "run_id": "",
+                        "scorer": name,
+                        "score": score,
+                        "passed": score >= 1.0,
+                        "details": details or {},
+                    }
+                )
+            if reporter is not None:
+                # Best-effort: the reporter swallows its own errors; the SQLite store
+                # above holds the authoritative results regardless.
+                await reporter.record(run_id, events)
+            return {"example_id": example.id, "scores": scores}
+        finally:
+            current_eval_run_id.reset(token)
 
     raw: list[dict[str, Any] | None] = list(
         await asyncio.gather(*(run_one(example) for example in dataset))

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
+import Link from "next/link";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -68,6 +69,14 @@ export function EvalDetail({ id }: { id: string }) {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <Link
+          href={`/retrievals?run_id=${encodeURIComponent(id)}`}
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
+          View retrievals →
+        </Link>
+      </div>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         <MetricCard label="Examples" value={String(byExample.size)} />
         {metrics.map((m) => (

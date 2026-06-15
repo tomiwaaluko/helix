@@ -25,3 +25,6 @@ current_engine: contextvars.ContextVar[Engine | None] = contextvars.ContextVar(
 current_run: contextvars.ContextVar[RunContext | None] = contextvars.ContextVar(
     "helix_current_run", default=None
 )
+current_eval_run_id: contextvars.ContextVar[str] = contextvars.ContextVar(
+    "helix_eval_run_id", default=""
+)
