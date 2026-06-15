@@ -36,9 +36,9 @@
 
 ```
 git log -1 --oneline
-(see below — pending commit)
+9f17cb6 feat(m9a): integration test suite for ClickHouse writers/readers
 git status
-(M9a changes staged)
+nothing to commit, working tree clean
 ```
 
 ---
