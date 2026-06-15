@@ -7,7 +7,7 @@
 
 ## 2026-06-15 — Claude Code → next session (M9b)
 
-**Last commit:** (being committed now — see `git log -1` after push)
+**Last commit:** 4955162 feat(M9b): production failure miner — finetune_jobs table, REST API, Python worker handler, web dashboard
 
 **Working tree:** clean after commit
 
@@ -44,9 +44,10 @@
 
 ```
 git log -1 --oneline
-(commit hash pending — session committing now)
+4955162 feat(M9b): production failure miner — finetune_jobs table, REST API, Python worker handler, web dashboard
 git status
 On branch claude/eloquent-clarke-qiha1x
+nothing to commit, working tree clean
 ```
 
 ---
