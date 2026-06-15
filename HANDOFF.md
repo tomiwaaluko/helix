@@ -7,7 +7,7 @@
 
 ## 2026-06-15 — Claude Code → next session (M8)
 
-**Last commit:** (see below — M8 commit pending)
+**Last commit:** `696ced1` feat(m8): LLM calls fan-out + cost dashboard
 
 **Branch:** `claude/eloquent-clarke-qiha1x`
 
@@ -34,9 +34,9 @@
 
 ```
 git log -1 --oneline
-(commit not yet created — see below)
+696ced1 feat(m8): LLM calls fan-out + cost dashboard
 git status
-(see working tree — all M8 changes uncommitted)
+nothing to commit, working tree clean
 ```
 
 ---
