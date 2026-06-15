@@ -7,8 +7,8 @@
 
 ## 2026-06-15 — Claude Code → next session (M6)
 
-**Last commit:** (see below — committing at end of session)
-**Working tree:** clean after commit
+**Last commit:** e933564 feat(m6): eval views slice — write path, REST endpoints, dashboard pages
+**Working tree:** clean
 
 **Task plan position:** M6 complete per `docs/m6-plan.md`.
 
