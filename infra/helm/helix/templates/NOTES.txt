@@ -1,0 +1,60 @@
+Helix {{ .Chart.AppVersion }} has been deployed.
+
+------------------------------------------------------------------------
+First-time setup
+------------------------------------------------------------------------
+
+1. Wait for all pods to become Ready:
+
+   kubectl get pods -n {{ .Release.Namespace }} -w
+
+2. Run database migrations (the orchestrator also runs them on startup,
+   but you can trigger manually if needed):
+
+   kubectl exec -n {{ .Release.Namespace }} \
+     deploy/{{ include "helix.fullname" . }}-orchestrator \
+     -- /app/orchestrator migrate
+
+3. Seed the corpus and embed into Qdrant (runs inside the worker pod):
+
+   kubectl exec -n {{ .Release.Namespace }} \
+     deploy/{{ include "helix.fullname" . }}-worker \
+     -- python -m helix.scripts.seed
+
+------------------------------------------------------------------------
+Accessing the orchestrator
+------------------------------------------------------------------------
+
+Port-forward the REST API:
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "helix.fullname" . }}-orchestrator 8080:{{ .Values.orchestrator.port }}
+
+Then:
+
+  curl -H "Authorization: Bearer $HELIX_API_TOKEN" \
+    http://localhost:8080/api/v1/runs
+
+Port-forward the gRPC endpoint (e.g. for grpcurl):
+
+  kubectl port-forward -n {{ .Release.Namespace }} \
+    svc/{{ include "helix.fullname" . }}-orchestrator-grpc 50051:{{ .Values.orchestrator.grpcPort }}
+
+------------------------------------------------------------------------
+Accessing the web dashboard
+------------------------------------------------------------------------
+
+If you have a web deployment, port-forward on 3000:
+
+  kubectl port-forward -n {{ .Release.Namespace }} svc/helix-web 3000:3000
+
+Then open http://localhost:3000 in your browser.
+
+------------------------------------------------------------------------
+Sending a test run
+------------------------------------------------------------------------
+
+  curl -X POST http://localhost:8080/api/v1/runs \
+    -H "Authorization: Bearer $HELIX_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{"workflow":"deep_research","input":{"query":"test"}}'

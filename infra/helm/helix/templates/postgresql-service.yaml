@@ -1,0 +1,38 @@
+# Headless service for stable DNS (StatefulSet pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-postgresql-headless
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+  ports:
+    - name: postgres
+      port: {{ .Values.postgresql.port }}
+      targetPort: postgres
+      protocol: TCP
+---
+# ClusterIP service for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-postgresql
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+  ports:
+    - name: postgres
+      port: {{ .Values.postgresql.port }}
+      targetPort: postgres
+      protocol: TCP

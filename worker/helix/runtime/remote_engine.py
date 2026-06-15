@@ -23,6 +23,8 @@ import logging
 import time
 import uuid
 from collections.abc import Callable, Coroutine
+from contextvars import ContextVar
+from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +45,39 @@ from helix.v1 import orchestrator_pb2, orchestrator_pb2_grpc, types_pb2
 logger = logging.getLogger(__name__)
 
 WorkflowHandler = Callable[..., Coroutine[Any, Any, Any]]
+
+
+@dataclass
+class _TaskCtx:
+    task_id: str
+    attempt: int
+    stub: orchestrator_pb2_grpc.OrchestratorStub
+
+
+_current_task: ContextVar[_TaskCtx | None] = ContextVar("_current_task", default=None)
+
+
+async def emit_task_checkpoint(phase: str) -> None:
+    """Emit a phase-progress checkpoint from inside a running workflow handler.
+
+    Calls the gRPC Checkpoint RPC with ``{"phase": phase}`` as state.  The
+    orchestrator's Checkpoint handler may use this to update intermediate
+    embedding-job statuses.  No-op (and never raises) when called outside a
+    remote-engine task context.
+    """
+    ctx = _current_task.get()
+    if ctx is None:
+        return
+    try:
+        await ctx.stub.Checkpoint(
+            orchestrator_pb2.CheckpointRequest(
+                task_id=ctx.task_id,
+                attempt_number=ctx.attempt,
+                state=json.dumps({"phase": phase}).encode(),
+            )
+        )
+    except Exception:  # noqa: BLE001
+        logger.debug("emit_task_checkpoint: gRPC call failed (non-fatal)", exc_info=True)
 
 
 class RemoteEngine:
@@ -195,6 +230,8 @@ class RemoteEngine:
         start_ms = int(time.monotonic() * 1000)
         span_id = uuid.uuid4().hex
 
+        assert self._stub is not None
+        token = _current_task.set(_TaskCtx(task_id=task_id, attempt=attempt, stub=self._stub))
         try:
             result = await handler(**input_data)
             duration_ms = int(time.monotonic() * 1000) - start_ms
@@ -225,6 +262,8 @@ class RemoteEngine:
                 span_id=span_id,
                 duration_ms=duration_ms,
             )
+        finally:
+            _current_task.reset(token)
 
     async def _complete(
         self,

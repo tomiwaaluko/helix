@@ -24,6 +24,7 @@ type finetuneJobCompleter interface {
 // embeddingJobFinalizer is a narrow interface for finalizing embedding_jobs on task completion.
 type embeddingJobFinalizer interface {
 	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, promoted bool) error
+	UpdateEmbeddingJobPhase(ctx context.Context, taskID, phase string) error
 }
 
 // Server implements helixv1.OrchestratorServer.
@@ -199,7 +200,8 @@ func (s *Server) CompleteTask(ctx context.Context, req *helixv1.CompleteTaskRequ
 	return &helixv1.CompleteTaskResponse{Disposition: disposition}, nil
 }
 
-// Checkpoint stores an in-progress task's state for crash recovery.
+// Checkpoint stores an in-progress task's state for crash recovery and, for
+// finetune_job tasks, updates the linked embedding_jobs phase (best-effort).
 func (s *Server) Checkpoint(ctx context.Context, req *helixv1.CheckpointRequest) (*helixv1.CheckpointResponse, error) {
 	err := s.store.UpsertCheckpoint(ctx, req.GetTaskId(), int(req.GetAttemptNumber()), req.GetState())
 	if err != nil {
@@ -209,6 +211,22 @@ func (s *Server) Checkpoint(ctx context.Context, req *helixv1.CheckpointRequest)
 			"error", err,
 		)
 		return nil, status.Errorf(codes.Internal, "upsert checkpoint: %v", err)
+	}
+
+	// Best-effort: detect a {"phase": "..."} state payload and update embedding_jobs.status.
+	if s.embeddingJobs != nil && len(req.GetState()) > 0 {
+		var phasePayload struct {
+			Phase string `json:"phase"`
+		}
+		if jsonErr := json.Unmarshal(req.GetState(), &phasePayload); jsonErr == nil && phasePayload.Phase != "" {
+			if phErr := s.embeddingJobs.UpdateEmbeddingJobPhase(ctx, req.GetTaskId(), phasePayload.Phase); phErr != nil {
+				s.logger.WarnContext(ctx, "UpdateEmbeddingJobPhase failed (non-fatal)",
+					"task_id", req.GetTaskId(),
+					"phase", phasePayload.Phase,
+					"error", phErr,
+				)
+			}
+		}
 	}
 
 	s.logger.DebugContext(ctx, "checkpoint stored",

@@ -7,7 +7,15 @@
   paths). The actual hyperparameters (lr, batch_size, epochs, seed, etc.) are now stored and
   visible via `GET /api/v1/embedding-jobs/{id}`.
 
-- **M11: Helm/Kubernetes deployment** *(in progress — see `infra/helm/`)*
+- **M11: Helm/Kubernetes deployment charts.**
+  `infra/helm/helix/` — production-ready Helm chart (v0.2.0) covering all nine stack
+  components: orchestrator, collector, worker×2 (research + finetune_job pools), postgresql,
+  nats, clickhouse, redis, minio, qdrant. Chart.yaml, values.yaml (dev defaults),
+  values-prod.yaml (higher replica counts + resource requests/limits + storageClassName),
+  _helpers.tpl (fullname/labels/selectorLabels + URL derivation helpers), NOTES.txt
+  (post-install instructions), secrets.yaml (single Secret with all connection strings),
+  9 Deployment/StatefulSet templates + paired ClusterIP+headless Service templates,
+  `infra/helm/README.md` with install, first-time-setup, and upgrade instructions.
 
 ## v0.2.0 — 2026-06-15
 

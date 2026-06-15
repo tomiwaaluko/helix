@@ -40,6 +40,12 @@ type EmbeddingJobStore interface {
 	// Looks up the row via finetune_job_id. Best-effort: no-op when no matching row exists.
 	// configJSON is the TrainConfig as JSON (may be nil when no training ran).
 	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, promoted bool) error
+
+	// UpdateEmbeddingJobPhase sets an intermediate status on the embedding job linked to taskID.
+	// Looks up via tasks→runs→embedding_jobs join.
+	// Phase is one of "mining", "training", "evaluating".
+	// No-op when no embedding_jobs row is linked to taskID's finetune_job workflow.
+	UpdateEmbeddingJobPhase(ctx context.Context, taskID, phase string) error
 }
 
 // PostgresEmbeddingJobStore implements EmbeddingJobStore against Postgres.
@@ -217,6 +223,25 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 	)
 	if err != nil {
 		return fmt.Errorf("embedding store: update outcome: %w", err)
+	}
+	return nil
+}
+
+func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobPhase(ctx context.Context, taskID, phase string) error {
+	_, err := s.pool.Exec(ctx, `
+		UPDATE embedding_jobs ej
+		SET    status     = $2,
+		       updated_at = now()
+		FROM   tasks   t
+		JOIN   runs    r  ON r.id   = t.run_id
+		JOIN   workflows w ON w.id  = r.workflow_id
+		WHERE  t.id   = $1
+		  AND  w.name = 'finetune_job'
+		  AND  ej.run_id = r.id`,
+		taskID, phase,
+	)
+	if err != nil {
+		return fmt.Errorf("embedding store: update phase: %w", err)
 	}
 	return nil
 }

@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helix.fullname" . }}-minio
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  serviceName: {{ include "helix.fullname" . }}-minio-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: minio
+  template:
+    metadata:
+      labels:
+        {{- include "helix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: minio
+    spec:
+      containers:
+        - name: minio
+          image: {{ .Values.minio.image | quote }}
+          imagePullPolicy: {{ .Values.minio.pullPolicy }}
+          args:
+            - server
+            - /data
+            - "--address"
+            - ":{{ .Values.minio.apiPort }}"
+            - "--console-address"
+            - ":{{ .Values.minio.consolePort }}"
+          ports:
+            - name: api
+              containerPort: {{ .Values.minio.apiPort }}
+              protocol: TCP
+            - name: console
+              containerPort: {{ .Values.minio.consolePort }}
+              protocol: TCP
+          env:
+            - name: MINIO_ROOT_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: MINIO_ROOT_USER
+            - name: MINIO_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: MINIO_ROOT_PASSWORD
+          livenessProbe:
+            httpGet:
+              path: /minio/health/live
+              port: api
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            httpGet:
+              path: /minio/health/ready
+              port: api
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.minio.storageClassName }}
+        storageClassName: {{ .Values.minio.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.minio.storage }}

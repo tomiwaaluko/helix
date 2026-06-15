@@ -30,7 +30,7 @@ from helix.rag.promotion.promote import promote_candidate
 from helix.rag.retriever import HybridRetriever
 from helix.rag.trainer.train import TrainConfig, TrainResult, train_embedding
 from helix.rag.trainer.triplets import build_triplets
-from helix.runtime.remote_engine import RemoteEngine
+from helix.runtime.remote_engine import RemoteEngine, emit_task_checkpoint
 from helix.runtime.sqlite_store import SqliteStore
 from helix.tools.blob import BlobStore
 from helix.tools.bm25 import BM25Index
@@ -112,6 +112,7 @@ async def _run_finetune_job(
     if not ch_http_url:
         raise RuntimeError("CLICKHOUSE_HTTP_URL must be set for production finetune jobs")
 
+    await emit_task_checkpoint("mining")
     cases: list[FailureCase] = await mine_from_clickhouse(
         train_dataset=[],
         ch_http_url=ch_http_url,
@@ -128,6 +129,7 @@ async def _run_finetune_job(
         }
 
     # Phase 2: build triplets and train.
+    await emit_task_checkpoint("training")
     triplets = build_triplets(cases, {})
     if not triplets:
         logger.info("finetune_job %s: no triplets — archived", job_id)
@@ -149,6 +151,7 @@ async def _run_finetune_job(
     )
 
     # Phase 3: promote — use a throw-away SQLiteStore for the canary step.
+    await emit_task_checkpoint("evaluating")
     # The promotion outcome is returned; Postgres finetune_jobs is updated by
     # the orchestrator's CompleteTask hook, not from here.
     tmp_db = str(Path(tempfile.mkdtemp()) / f"finetune-{job_id}.db")

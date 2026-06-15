@@ -1,0 +1,46 @@
+# Headless service for stable DNS (StatefulSet pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-minio-headless
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+  ports:
+    - name: api
+      port: {{ .Values.minio.apiPort }}
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: {{ .Values.minio.consolePort }}
+      targetPort: console
+      protocol: TCP
+---
+# ClusterIP service for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-minio
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: minio
+  ports:
+    - name: api
+      port: {{ .Values.minio.apiPort }}
+      targetPort: api
+      protocol: TCP
+    - name: console
+      port: {{ .Values.minio.consolePort }}
+      targetPort: console
+      protocol: TCP

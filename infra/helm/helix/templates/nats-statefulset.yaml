@@ -1,0 +1,65 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "helix.fullname" . }}-nats
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  serviceName: {{ include "helix.fullname" . }}-nats-headless
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: nats
+  template:
+    metadata:
+      labels:
+        {{- include "helix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: nats
+    spec:
+      containers:
+        - name: nats
+          image: {{ .Values.nats.image | quote }}
+          imagePullPolicy: {{ .Values.nats.pullPolicy }}
+          args:
+            - "--jetstream"
+            - "--store_dir=/data"
+          ports:
+            - name: client
+              containerPort: {{ .Values.nats.port }}
+              protocol: TCP
+            - name: monitor
+              containerPort: {{ .Values.nats.monitorPort }}
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: monitor
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        {{- if .Values.nats.storageClassName }}
+        storageClassName: {{ .Values.nats.storageClassName | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.nats.storage }}

@@ -1,0 +1,161 @@
+---
+# Research worker pool
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helix.fullname" . }}-worker
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+spec:
+  replicas: {{ .Values.worker.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker
+  template:
+    metadata:
+      labels:
+        {{- include "helix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          args:
+            - "--pool"
+            - {{ .Values.worker.pool | quote }}
+          env:
+            - name: HELIX_POOL
+              value: {{ .Values.worker.pool | quote }}
+            - name: HELIX_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: HELIX_API_TOKEN
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: DATABASE_URL
+            - name: NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: NATS_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: REDIS_URL
+            - name: QDRANT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: QDRANT_URL
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: CLICKHOUSE_URL
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_ENDPOINT
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_SECRET_KEY
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ include "helix.fullname" . }}-collector:{{ .Values.collector.port }}"
+          resources:
+            {{- toYaml .Values.worker.resources | nindent 12 }}
+
+---
+# Finetune-job worker pool
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "helix.fullname" . }}-worker-finetune
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker-finetune
+spec:
+  replicas: {{ .Values.worker.finetune.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: worker-finetune
+  template:
+    metadata:
+      labels:
+        {{- include "helix.labels" . | nindent 8 }}
+        app.kubernetes.io/component: worker-finetune
+    spec:
+      containers:
+        - name: worker-finetune
+          image: "{{ .Values.worker.image.repository }}:{{ .Values.worker.image.tag }}"
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          args:
+            - "--pool"
+            - {{ .Values.worker.finetune.pool | quote }}
+          env:
+            - name: HELIX_POOL
+              value: {{ .Values.worker.finetune.pool | quote }}
+            - name: HELIX_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: HELIX_API_TOKEN
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: DATABASE_URL
+            - name: NATS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: NATS_URL
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: REDIS_URL
+            - name: QDRANT_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: QDRANT_URL
+            - name: CLICKHOUSE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: CLICKHOUSE_URL
+            - name: S3_ENDPOINT
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_ENDPOINT
+            - name: S3_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_ACCESS_KEY
+            - name: S3_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "helix.secretName" . }}
+                  key: S3_SECRET_KEY
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://{{ include "helix.fullname" . }}-collector:{{ .Values.collector.port }}"
+          resources:
+            {{- toYaml .Values.worker.finetune.resources | nindent 12 }}

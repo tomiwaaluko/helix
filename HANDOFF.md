@@ -5,6 +5,51 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M11: Helm charts)
+
+**Last commit:** (see `git log -1 --oneline` after commit)
+
+**Working tree:** clean after commit
+
+**Current task:** M11 — Helm/Kubernetes deployment charts. Complete.
+
+**What shipped:**
+- `infra/helm/helix/` — full Helm chart covering all 9 stack components.
+  Chart.yaml (helix v0.2.0), values.yaml (dev defaults), values-prod.yaml
+  (production replica counts + resource limits + storageClassName), _helpers.tpl
+  (fullname/labels/selectorLabels + URL-derivation helpers for all services),
+  NOTES.txt, secrets.yaml, orchestrator + collector Deployments + Services,
+  worker×2 Deployments (research + finetune_job pools in one file with `---`),
+  StatefulSets + headless + ClusterIP Services for postgresql/nats/clickhouse/minio/qdrant,
+  Deployment + Service for redis.
+- `infra/helm/README.md` — install, upgrade, first-time-setup, key values table.
+- `CHANGELOG.md` — M11 bullet expanded under `## Unreleased`.
+
+**What's next (backlog):**
+- M10 deferred: intermediate embedding-job phase statuses (mining/training/evaluating),
+  MinIO presigned URLs for `artifact_uri`.
+- Production-scale eval (`make eval-full`).
+- Helm: ingress template (optional, needs nginx or similar), HorizontalPodAutoscaler,
+  PodDisruptionBudget for orchestrator.
+
+**Open questions / gotchas:**
+- `helm lint` could not be run in this environment (no helm binary available via
+  network or package manager). Templates were validated by: brace-count check,
+  YAML-only file parse, cross-referencing all `include` calls against `_helpers.tpl`
+  definitions — all match. Linting should be done in CI before applying to a cluster.
+- MinIO port mapping: the compose file maps host:9100 → container:9000 to avoid
+  ClickHouse's host:9000. In Kubernetes each pod has its own network namespace so
+  there is no collision; MinIO is configured to listen on 9100 internally via the
+  `--address :9100` arg, which matches `minio.apiPort: 9100` in values.yaml.
+- ClickHouse password is optional (empty by default for dev); the statefulset
+  conditionally adds the `CLICKHOUSE_PASSWORD` env var only when `secrets.clickhousePassword`
+  is non-empty.
+
+**git log -1 --oneline:** (run after commit)
+**git status:** clean
+
+---
+
 ## 2026-06-15 — Claude Code → next session (doc drift cleanup)
 
 **Last commit:** (this commit — docs only)
