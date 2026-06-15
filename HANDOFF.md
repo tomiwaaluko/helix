@@ -5,6 +5,35 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (doc drift cleanup)
+
+**Last commit:** (this commit — docs only)
+
+**Working tree:** clean after commit
+
+**Current task:** Documentation drift fix — no code change.
+
+**What shipped:**
+- `AGENTS.md` — "Current phase" updated from stale M5 to M10; rewrote the milestone arc summary,
+  the on-disk stack (now lists all dashboard pages + finetune/embedding tables), and the
+  "What is NOT yet on disk" section (now: Helm/k8s, small M10 deferred items, production-scale eval).
+- `CLAUDE.md` — removed the false "slice phase / Go-NATS-Postgres-ClickHouse not on disk yet" line.
+- `docs/m6-plan.md`, `docs/m7-plan.md` — dropped "DRAFT — awaiting sign-off" banners (both shipped).
+- `CHANGELOG.md` — cut `## v0.2.0 — 2026-06-15` over the M1–M10 entries; `## Unreleased` now empty.
+
+**What's next (backlog, unstarted):**
+- Helm/Kubernetes deployment (largest remaining milestone; `infra/` has only docker-compose).
+- M10 deferred items: intermediate embedding-job phase statuses, MinIO presign for `artifact_uri`,
+  real `TrainConfig` → `embedding_jobs.config`.
+- Production-scale eval (`make eval-full`).
+- Optional: git-tag `v0.2.0` to match the CHANGELOG cut (not done — tags are outward-facing).
+
+**Open questions:** Whether to tag `v0.2.0` in git. Left untagged pending maintainer call.
+
+**Gotchas:** None — docs only, no code touched.
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M10: embedding-jobs view)
 
 **Last commit:** 22e1894 feat(M10): complete embedding-jobs wiring — gRPC hook, orchestrator, web dashboard

@@ -1,6 +1,6 @@
 # M7 Plan — Retrievals fan-out, ClickHouse miner path, retrieval view
 
-> **Status: DRAFT — awaiting sign-off.**
+> **Status: IMPLEMENTED.** See the M7 entry in `CHANGELOG.md`.
 >
 > M7 makes the `retrievals` ClickHouse table live, updates the Python miner to read
 > from it when `CLICKHOUSE_URL` is set, and surfaces retrieval data in the dashboard.

@@ -6,29 +6,37 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: M5 — Trace endpoint + trace view + CI wiring
+## Current phase: M10 — Embedding-jobs view (M1–M10 landed)
 
-**The authoritative scope is `docs/m5-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
+**The authoritative scope is the milestone plans `docs/m1-plan.md … docs/m10-plan.md` (all implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-M5 adds `GET /api/v1/runs/{run_id}/trace` to the Go orchestrator (reads spans from ClickHouse,
-presigns MinIO blob URIs) and the `/runs/[id]/trace` dashboard page (`<SpanTree>` — collapsible
-parent-child tree with lazy blob hydration). `web-gate` is now wired into the root `make test` /
-`make lint` targets. The full stack on disk:
+The full production stack and dashboard are on disk. The research thesis is demonstrated:
+on BRIGHT biology the mine→train→promote loop lifts recall@10 from **0.253 → 0.343** (+0.090,
+95% CI [0.010, 0.175], sign-test p=0.041) — see `evals/baselines/bright_b5_canary_flips.json`.
 
-- **`web/`** — Next.js 14 (App Router), TanStack Query, shadcn/ui, Tailwind; `/runs`,
-  `/runs/[id]`, `/runs/[id]/trace`; BFF route handlers in `web/app/api/`; types from `web/openapi.yaml`
-- Redis + MinIO (M3), and the M3/M2/M1 services below.
+Milestone arc (all landed; see `CHANGELOG.md` for per-milestone detail):
+- **M1** Go orchestrator (gRPC + REST + migration runner) · **M2** ClickHouse + OTel collector ·
+  **M3** Redis + MinIO · **M4** dashboard Runs slice · **M5** trace endpoint + trace view + CI wiring ·
+  **M6** eval views · **M7** retrievals fan-out + ClickHouse miner path · **M8** LLM-calls fan-out +
+  cost dashboard · **M9a** integration test suite · **M9b** production failure miner
+  (`POST /api/v1/finetune-jobs`) · **M10** embedding-jobs write/read path + `/embeddings` view.
 
-M3 adds ephemeral coordination (Redis) and blob storage (MinIO) on top of the M2 stack. The full stack on disk:
+The full stack on disk:
 
-- **Postgres 15** for run/task/worker state (`migrations/202606150001_initial_schema.sql`)
+- **`web/`** — Next.js 14 (App Router), TanStack Query, shadcn/ui, Tailwind. Pages: `/runs`,
+  `/runs/[id]`, `/runs/[id]/trace`, `/evals`, `/evals/[id]`, `/retrievals`, `/llm-calls`,
+  `/finetune-jobs`, `/embeddings`. BFF route handlers in `web/app/api/`; types from `web/openapi.yaml`.
+- **Postgres 15** for run/task/worker state + `finetune_jobs` + `embedding_jobs`
+  (`migrations/202606150001_initial_schema.sql`, `202606160001_finetune_jobs.sql`,
+  `202606160002_embedding_jobs_finetune_link.sql`)
 - **NATS JetStream** for task dispatch (`helix.tasks.dispatch.<pool>`)
-- **ClickHouse 24** for spans + shell tables (`migrations/clickhouse/202606150001_initial_schema.sql`)
+- **ClickHouse 24** for spans + `retrievals` + `llm_calls` + `eval_events` (all live)
 - **Redis 7** for the exactly-once sentinel and the LLM rate limiter (`worker/helix/runtime/idempotency.py`, `worker/helix/tools/rate_limit.py`)
 - **MinIO** for large span-payload blobs (`worker/helix/tools/blob.py`) — `s3://helix-blobs/<y>/<m>/<d>/<span_id>.bin`
 - **Go orchestrator** (`cmd/orchestrator/`) — gRPC + REST server, migration runner
 - **Go collector** (`cmd/collector/`) — OTLP/gRPC receiver → ClickHouse BatchWriter
-- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer
+- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer; handles
+  `deep_research` and `finetune_job` workflows
 - **Proto contracts** (`proto/helix/v1/`) — stubs in `gen/go/helix/v1/` (Go) and `worker/helix/v1/` (Python)
 - **Qdrant** for vectors
 - **JSONL spans** (`data/spans.jsonl`) — still written; OTel is additive (dual-write)
@@ -36,12 +44,16 @@ M3 adds ephemeral coordination (Redis) and blob storage (MinIO) on top of the M2
 
 Redis and MinIO are **no-ops when `REDIS_URL` / `S3_ENDPOINT` are unset**: `make eval` runs in local mode (Python in-process) with neither. `make dev` boots Qdrant + Postgres + NATS + ClickHouse + Redis + MinIO. MinIO's API is on host **9100** (console 9101) to avoid ClickHouse's host 9000. Span-payload offload is gated by `HELIX_SPAN_PAYLOADS` (default off).
 
-What is NOT yet on disk (future milestones):
-- `llm_calls`, `retrievals`, `eval_events` ClickHouse tables are created as empty shells; mining lands in M5.
-- Dashboard is a thin Runs slice only; trace/eval/retrieval/embedding views and the orchestrator's signed-URL trace endpoint (Go MinIO wiring) land in M5.
-- Failure miner as production workflow (M5), Helm/Kubernetes (M6).
+What is NOT yet on disk (remaining work):
+- **Helm/Kubernetes deployment.** `infra/` has only `docker-compose.yml`; no charts/manifests for
+  orchestrator, collector, worker pools, or the datastores. This is the largest remaining milestone.
+- **Small deferred items from M10:** intermediate embedding-job phase statuses
+  (`mining`/`training`/`evaluating`, needs worker checkpoints); presigned MinIO URLs for
+  `embedding_jobs.artifact_uri`; capturing the real `TrainConfig` into `embedding_jobs.config`.
+- **Production-scale eval:** `make eval-full` (BRIGHT + 50k arXiv, ~1hr, live cluster) — the
+  slice-scale BRIGHT experiment is run; the full-corpus run is not.
 
-Update this section when M5 lands (failure miner + dashboard trace/eval views).
+Update this section as new milestones land.
 
 ## What this repo is
 

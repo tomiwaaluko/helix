@@ -1,6 +1,6 @@
 # M6 Plan — Eval Views Slice
 
-> **Status: DRAFT — awaiting sign-off.**
+> **Status: IMPLEMENTED.** See the M6 entry in `CHANGELOG.md`.
 >
 > M6 closes the observability loop for the research experiment by making eval results
 > visible in the dashboard. The Python harness gains an optional reporter that posts

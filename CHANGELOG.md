@@ -1,5 +1,14 @@
 ## Unreleased
 
+_Nothing yet._
+
+## v0.2.0 — 2026-06-15
+
+Vertical slice complete through M10: Go control plane, full observability pipeline
+(spans, traces, evals, retrievals, LLM calls, embeddings), and the production
+mine→train→promote failure-miner loop. Research thesis demonstrated on BRIGHT biology
+(recall@10 0.253 → 0.343, +0.090, sign-test p=0.041).
+
 - **M10: Wire embedding_jobs into production.**
   Migration `202606160002_embedding_jobs_finetune_link.sql` adds `finetune_job_id UUID REFERENCES finetune_jobs(id) ON DELETE SET NULL`
   and index to `embedding_jobs`. Go: `internal/store/embedding.go` (`EmbeddingJobStore` interface + `PostgresEmbeddingJobStore`);
