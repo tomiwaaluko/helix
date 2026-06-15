@@ -57,19 +57,27 @@ type finetuneJobStorer interface {
 	ListFinetuneJobs(ctx context.Context) ([]store.FinetuneJob, error)
 }
 
+// embeddingJobStorer manages embedding job CRUD in Postgres.
+type embeddingJobStorer interface {
+	CreateEmbeddingJob(ctx context.Context, baseModel string, finetuneJobID string) (store.EmbeddingJob, error)
+	GetEmbeddingJob(ctx context.Context, jobID string) (store.EmbeddingJob, error)
+	ListEmbeddingJobs(ctx context.Context) ([]store.EmbeddingJob, error)
+}
+
 // Handler holds the dependencies for the REST API.
 type Handler struct {
 	store           store.Store
 	nats            dispatch.Publisher
 	logger          *slog.Logger
 	apiToken        string
-	spanReader      spanQuerier      // nil → trace endpoint returns 503
-	presigner       attrPresigner    // nil → blob URIs are omitted (not presigned)
-	evalWriter      evalWriter       // nil → eval write endpoint returns 503
-	evalReader      evalQuerier      // nil → eval read endpoints return 503
-	retrievalReader retrievalQuerier // nil → retrievals endpoint returns 503
-	llmCallReader   llmCallQuerier   // nil → llm-calls endpoint returns 503
-	finetuneJobs    finetuneJobStorer // nil → finetune-jobs endpoints return 503
+	spanReader      spanQuerier        // nil → trace endpoint returns 503
+	presigner       attrPresigner      // nil → blob URIs are omitted (not presigned)
+	evalWriter      evalWriter         // nil → eval write endpoint returns 503
+	evalReader      evalQuerier        // nil → eval read endpoints return 503
+	retrievalReader retrievalQuerier   // nil → retrievals endpoint returns 503
+	llmCallReader   llmCallQuerier     // nil → llm-calls endpoint returns 503
+	finetuneJobs    finetuneJobStorer  // nil → finetune-jobs endpoints return 503
+	embeddingJobs   embeddingJobStorer // nil → embedding-jobs endpoints return 503
 }
 
 // NewHandler constructs a Handler with the given dependencies.
@@ -119,6 +127,13 @@ func (h *Handler) WithFinetuneJobs(fj finetuneJobStorer) *Handler {
 	return h
 }
 
+// WithEmbeddingJobs adds Postgres embedding job CRUD to the handler.
+// Calling this enables GET /api/v1/embedding-jobs and GET /api/v1/embedding-jobs/{job_id}.
+func (h *Handler) WithEmbeddingJobs(ej embeddingJobStorer) *Handler {
+	h.embeddingJobs = ej
+	return h
+}
+
 // Router returns an http.Handler with all API routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
@@ -141,6 +156,9 @@ func (h *Handler) Router() http.Handler {
 	r.Post("/api/v1/finetune-jobs", h.createFinetuneJob)
 	r.Get("/api/v1/finetune-jobs", h.listFinetuneJobs)
 	r.Get("/api/v1/finetune-jobs/{job_id}", h.getFinetuneJob)
+
+	r.Get("/api/v1/embedding-jobs", h.listEmbeddingJobs)
+	r.Get("/api/v1/embedding-jobs/{job_id}", h.getEmbeddingJob)
 
 	return r
 }
@@ -781,6 +799,14 @@ func (h *Handler) createFinetuneJob(w http.ResponseWriter, r *http.Request) {
 			"job_id", job.ID, "run_id", run.ID, "error", err)
 	}
 
+	// Best-effort: create a linked embedding job row so the embeddings view tracks this pipeline.
+	if h.embeddingJobs != nil {
+		if _, ejErr := h.embeddingJobs.CreateEmbeddingJob(r.Context(), "nomic-ai/nomic-embed-text-v1.5", job.ID); ejErr != nil {
+			h.logger.WarnContext(r.Context(), "createFinetuneJob: CreateEmbeddingJob failed (non-fatal)",
+				"job_id", job.ID, "error", ejErr)
+		}
+	}
+
 	env := &helixv1.TaskEnvelope{
 		TaskId:          task.ID,
 		RunId:           run.ID,
@@ -857,4 +883,46 @@ func writeJSON(w http.ResponseWriter, code int, v interface{}) {
 		// At this point the header is already sent; nothing useful we can do.
 		_ = err
 	}
+}
+
+// ── embedding-jobs endpoints ──────────────────────────────────────────────────
+
+// listEmbeddingJobs handles GET /api/v1/embedding-jobs.
+func (h *Handler) listEmbeddingJobs(w http.ResponseWriter, r *http.Request) {
+	if h.embeddingJobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "embedding service not configured",
+		})
+		return
+	}
+
+	jobs, err := h.embeddingJobs.ListEmbeddingJobs(r.Context())
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "listEmbeddingJobs: ListEmbeddingJobs failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list embedding jobs"})
+		return
+	}
+	if jobs == nil {
+		jobs = []store.EmbeddingJob{}
+	}
+	writeJSON(w, http.StatusOK, jobs)
+}
+
+// getEmbeddingJob handles GET /api/v1/embedding-jobs/{job_id}.
+func (h *Handler) getEmbeddingJob(w http.ResponseWriter, r *http.Request) {
+	if h.embeddingJobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "embedding service not configured",
+		})
+		return
+	}
+
+	jobID := chi.URLParam(r, "job_id")
+	job, err := h.embeddingJobs.GetEmbeddingJob(r.Context(), jobID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "getEmbeddingJob: GetEmbeddingJob failed", "job_id", jobID, "error", err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "embedding job not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
 }
