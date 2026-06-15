@@ -1,5 +1,19 @@
 ## Unreleased
 
+- **M5: Trace endpoint + dashboard trace view + CI wiring.**
+  Go: `GET /api/v1/runs/{run_id}/trace` reads spans from ClickHouse by `trace_id`
+  and rewrites `s3://` blob attributes to presigned MinIO HTTPS URLs (1h expiry).
+  Returns 503 with a clear message when `CLICKHOUSE_URL` is unset — no config required
+  for running without ClickHouse. New packages: `internal/clickhouse/reader.go`,
+  `internal/minio/presigner.go` (new dep: `minio/minio-go/v7`); handler gains
+  `WithTrace(sr, presigner)` setter; `config.ClickHouseURL` optional field; 5 new
+  Go handler tests + 7 presigner unit tests.
+  Dashboard: `/runs/[id]/trace` page with `<SpanTree>` — collapsible parent-child
+  tree built from `parent_span_id`; per-span attribute table; `_url` attributes show a
+  lazy "Load payload" button (direct fetch of presigned URL, no BFF needed). "View trace"
+  button added to run-detail. BFF route `web/app/api/runs/[id]/trace/route.ts` proxies
+  with bearer token. 8 vitest tests. `web-gate` wired into root `make test` + `make lint`.
+
 - **M4: Dashboard (thin Runs slice) landed.**
   New `web/` Next.js 14 (App Router) app: `/runs` (table + status filter + 3 s polling) and
   `/runs/[id]` (metadata, input/output JSON, task tree, cancel). Data flows through a

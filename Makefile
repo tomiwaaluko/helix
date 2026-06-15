@@ -90,7 +90,7 @@ worker:
 	  --nats nats://localhost:4222 \
 	  --pool research
 
-test:
+test: web-test
 	cd worker && python3.12 -m pytest tests/ -x -q --ignore=tests/integration
 	go test ./cmd/... ./internal/... ./gen/... -count=1
 
@@ -150,7 +150,7 @@ finetune-bright:
 	  --promotion-alias corpus.bright.active \
 	  --concurrency 4
 
-lint:
+lint: web-lint
 	PYTHONPATH=worker python3.12 scripts/check_holdout_integrity.py
 	cd worker && ruff check . && python3.12 -m mypy --strict helix/
 	golangci-lint run ./...

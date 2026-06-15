@@ -38,6 +38,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/runs/{run_id}/trace": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch the span tree for a run. Returns 503 when ClickHouse is not configured. */
+        get: operations["getTrace"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/runs/{run_id}/cancel": {
         parameters: {
             query?: never;
@@ -90,6 +107,30 @@ export interface components {
         CancelResponse: {
             status?: string;
             run_id?: string;
+        };
+        SpanRecord: {
+            span_id: string;
+            parent_span_id?: string;
+            run_id?: string;
+            task_id?: string;
+            attempt_number?: number;
+            name: string;
+            kind: string;
+            /** Format: date-time */
+            start_time: string;
+            /** Format: date-time */
+            end_time: string;
+            duration_ms: number;
+            status?: string;
+            status_message?: string;
+            service_name?: string;
+            attributes?: {
+                [key: string]: string;
+            };
+        };
+        TraceResponse: {
+            trace_id: string;
+            spans: components["schemas"]["SpanRecord"][];
         };
         ErrorResponse: {
             error?: string;
@@ -147,6 +188,46 @@ export interface operations {
             };
             /** @description Run not found. */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTrace: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Trace with spans (blob attributes presigned to HTTPS URLs). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TraceResponse"];
+                };
+            };
+            /** @description Run not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Trace service not configured (CLICKHOUSE_URL not set). */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

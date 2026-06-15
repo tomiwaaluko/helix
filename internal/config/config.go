@@ -10,11 +10,12 @@ import (
 
 // Config holds all runtime configuration for the orchestrator.
 type Config struct {
-	DatabaseURL string
-	NATSURL     string
-	GRPCPort    int
-	HTTPPort    int
-	APIToken    string
+	DatabaseURL   string
+	NATSURL       string
+	GRPCPort      int
+	HTTPPort      int
+	APIToken      string
+	ClickHouseURL string // optional; enables GET /api/v1/runs/{id}/trace when set
 }
 
 // Load reads configuration from environment variables and returns a validated Config.
@@ -52,6 +53,8 @@ func Load() (Config, error) {
 	if cfg.APIToken == "" {
 		return Config{}, errors.New("config: HELIX_API_TOKEN is required but not set")
 	}
+
+	cfg.ClickHouseURL = os.Getenv("CLICKHOUSE_URL")
 
 	return cfg, nil
 }

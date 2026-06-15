@@ -24,9 +24,11 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/tomiwaaluko/helix/internal/api"
+	"github.com/tomiwaaluko/helix/internal/clickhouse"
 	"github.com/tomiwaaluko/helix/internal/config"
 	"github.com/tomiwaaluko/helix/internal/dispatch"
 	grpcserver "github.com/tomiwaaluko/helix/internal/grpc"
+	helixminio "github.com/tomiwaaluko/helix/internal/minio"
 	"github.com/tomiwaaluko/helix/internal/store"
 
 	helixv1 "github.com/tomiwaaluko/helix/gen/go/helix/v1"
@@ -64,6 +66,23 @@ func main() {
 	}
 	defer nc.Close()
 
+	// Build the HTTP handler, wiring in optional trace components.
+	h := api.NewHandler(pg, nc, log, cfg.APIToken)
+	if cfg.ClickHouseURL != "" {
+		chConn, err := clickhouse.Open(ctx, cfg.ClickHouseURL)
+		if err != nil {
+			log.Warn("clickhouse connect failed — trace endpoint disabled", "err", err)
+		} else {
+			presigner, err := helixminio.FromEnv()
+			if err != nil {
+				log.Warn("minio presigner init failed — blob URIs will not be presigned", "err", err)
+			}
+			sr := clickhouse.NewSpanReader(chConn)
+			h = h.WithTrace(sr, presigner)
+			log.Info("trace endpoint enabled", "clickhouse_url", cfg.ClickHouseURL)
+		}
+	}
+
 	// Start gRPC server
 	grpcAddr := fmt.Sprintf(":%d", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
@@ -77,14 +96,12 @@ func main() {
 
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%d", cfg.HTTPPort)
-	httpHandler := api.NewHandler(pg, nc, log, cfg.APIToken)
 	httpSrv := &http.Server{
 		Addr:              httpAddr,
-		Handler:           httpHandler.Router(),
+		Handler:           h.Router(),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
-	// Health endpoint (unauthenticated)
 	go func() {
 		log.Info("grpc server starting", "addr", grpcAddr)
 		if err := grpcSrv.Serve(lis); err != nil {

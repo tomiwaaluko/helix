@@ -7,3 +7,5 @@ export type Task = components["schemas"]["Task"];
 export type RunDetail = components["schemas"]["RunDetail"];
 export type RunStatus = components["schemas"]["RunStatus"];
 export type TaskStatus = components["schemas"]["TaskStatus"];
+export type SpanRecord = components["schemas"]["SpanRecord"];
+export type TraceResponse = components["schemas"]["TraceResponse"];

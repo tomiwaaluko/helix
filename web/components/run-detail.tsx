@@ -1,9 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { StatusBadge } from "@/components/status-badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -65,6 +66,12 @@ export function RunDetail({ id }: { id: string }) {
           <CardTitle className="font-mono text-base">{run.id}</CardTitle>
           <div className="flex items-center gap-3">
             <StatusBadge status={run.status} />
+            <Link
+              href={`/runs/${id}/trace`}
+              className={buttonVariants({ variant: "outline", size: "sm" })}
+            >
+              View trace
+            </Link>
             {canCancel && (
               <Button
                 variant="destructive"

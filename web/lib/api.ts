@@ -1,6 +1,6 @@
 // Client-side data layer: calls the same-origin BFF (app/api/**), never the
 // orchestrator directly. Used by TanStack Query hooks in client components.
-import type { Run, RunDetail } from "@/lib/types";
+import type { Run, RunDetail, TraceResponse } from "@/lib/types";
 
 async function getJSON<T>(url: string): Promise<T> {
   const res = await fetch(url);
@@ -25,4 +25,8 @@ export async function cancelRun(id: string): Promise<void> {
   if (!res.ok) {
     throw new Error(`cancel failed (${res.status})`);
   }
+}
+
+export function fetchTrace(id: string): Promise<TraceResponse> {
+  return getJSON<TraceResponse>(`/api/runs/${encodeURIComponent(id)}/trace`);
 }

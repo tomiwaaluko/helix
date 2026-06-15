@@ -6,13 +6,17 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: M4 — Dashboard (thin Runs slice)
+## Current phase: M5 — Trace endpoint + trace view + CI wiring
 
-**The authoritative scope is `docs/m4-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
+**The authoritative scope is `docs/m5-plan.md` (implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-M4 adds a Next.js 14 dashboard (`web/`) — a thin Runs slice (list + detail with task tree) over the existing REST API, with a server-side BFF proxy that keeps the bearer token off the browser. Backend change is additive: `GET /api/v1/runs/{id}` now returns a `tasks` array. Trace/eval/retrieval/embedding views are deferred (M5+). The full stack on disk:
+M5 adds `GET /api/v1/runs/{run_id}/trace` to the Go orchestrator (reads spans from ClickHouse,
+presigns MinIO blob URIs) and the `/runs/[id]/trace` dashboard page (`<SpanTree>` — collapsible
+parent-child tree with lazy blob hydration). `web-gate` is now wired into the root `make test` /
+`make lint` targets. The full stack on disk:
 
-- **`web/`** — Next.js 14 (App Router), TanStack Query, shadcn/ui, Tailwind; `/runs` + `/runs/[id]`; BFF route handlers in `web/app/api/`; types generated from `web/openapi.yaml`
+- **`web/`** — Next.js 14 (App Router), TanStack Query, shadcn/ui, Tailwind; `/runs`,
+  `/runs/[id]`, `/runs/[id]/trace`; BFF route handlers in `web/app/api/`; types from `web/openapi.yaml`
 - Redis + MinIO (M3), and the M3/M2/M1 services below.
 
 M3 adds ephemeral coordination (Redis) and blob storage (MinIO) on top of the M2 stack. The full stack on disk:

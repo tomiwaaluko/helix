@@ -51,6 +51,35 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /runs/{run_id}/trace:
+    get:
+      operationId: getTrace
+      summary: Fetch the span tree for a run. Returns 503 when ClickHouse is not configured.
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace with spans (blob attributes presigned to HTTPS URLs).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+        "404":
+          description: Run not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Trace service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /runs/{run_id}/cancel:
     post:
       operationId: cancelRun
@@ -135,6 +164,52 @@ components:
           type: string
         run_id:
           type: string
+    SpanRecord:
+      type: object
+      required: [span_id, name, kind, start_time, end_time, duration_ms]
+      properties:
+        span_id:
+          type: string
+        parent_span_id:
+          type: string
+        run_id:
+          type: string
+        task_id:
+          type: string
+        attempt_number:
+          type: integer
+        name:
+          type: string
+        kind:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        status:
+          type: string
+        status_message:
+          type: string
+        service_name:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+    TraceResponse:
+      type: object
+      required: [trace_id, spans]
+      properties:
+        trace_id:
+          type: string
+        spans:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanRecord"
     ErrorResponse:
       type: object
       properties:

@@ -2,6 +2,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -12,16 +13,29 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	helixv1 "github.com/tomiwaaluko/helix/gen/go/helix/v1"
+	"github.com/tomiwaaluko/helix/internal/clickhouse"
 	"github.com/tomiwaaluko/helix/internal/dispatch"
 	"github.com/tomiwaaluko/helix/internal/store"
 )
 
+// spanQuerier reads spans from ClickHouse by trace ID.
+type spanQuerier interface {
+	GetTraceSpans(ctx context.Context, traceID string) ([]clickhouse.SpanRow, error)
+}
+
+// attrPresigner rewrites s3:// URIs in span attributes to presigned GET URLs.
+type attrPresigner interface {
+	PresignAttrs(attrs map[string]string, expiry time.Duration) (map[string]string, error)
+}
+
 // Handler holds the dependencies for the REST API.
 type Handler struct {
-	store    store.Store
-	nats     dispatch.Publisher
-	logger   *slog.Logger
-	apiToken string
+	store      store.Store
+	nats       dispatch.Publisher
+	logger     *slog.Logger
+	apiToken   string
+	spanReader spanQuerier  // nil → trace endpoint returns 503
+	presigner  attrPresigner // nil → blob URIs are omitted (not presigned)
 }
 
 // NewHandler constructs a Handler with the given dependencies.
@@ -34,6 +48,14 @@ func NewHandler(s store.Store, d dispatch.Publisher, log *slog.Logger, token str
 	}
 }
 
+// WithTrace adds ClickHouse span reading and optional MinIO presigning to the handler.
+// Calling this enables GET /api/v1/runs/{run_id}/trace.
+func (h *Handler) WithTrace(sr spanQuerier, p attrPresigner) *Handler {
+	h.spanReader = sr
+	h.presigner = p
+	return h
+}
+
 // Router returns an http.Handler with all API routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
@@ -44,6 +66,7 @@ func (h *Handler) Router() http.Handler {
 	r.Get("/api/v1/runs", h.listRuns)
 	r.Get("/api/v1/runs/{run_id}", h.getRun)
 	r.Post("/api/v1/runs/{run_id}/cancel", h.cancelRun)
+	r.Get("/api/v1/runs/{run_id}/trace", h.getTrace)
 
 	return r
 }
@@ -221,6 +244,100 @@ func (h *Handler) cancelRun(w http.ResponseWriter, r *http.Request) {
 
 	h.logger.InfoContext(r.Context(), "run cancelled", "run_id", runID)
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled", "run_id": runID})
+}
+
+// traceResponse is the GET /api/v1/runs/{run_id}/trace response body.
+type traceResponse struct {
+	TraceID string         `json:"trace_id"`
+	Spans   []spanResponse `json:"spans"`
+}
+
+// spanResponse is a single span within a traceResponse.
+type spanResponse struct {
+	SpanID        string            `json:"span_id"`
+	ParentSpanID  string            `json:"parent_span_id,omitempty"`
+	RunID         string            `json:"run_id,omitempty"`
+	TaskID        string            `json:"task_id,omitempty"`
+	AttemptNumber uint32            `json:"attempt_number,omitempty"`
+	Name          string            `json:"name"`
+	Kind          string            `json:"kind"`
+	StartTime     time.Time         `json:"start_time"`
+	EndTime       time.Time         `json:"end_time"`
+	DurationMS    uint32            `json:"duration_ms"`
+	Status        string            `json:"status,omitempty"`
+	StatusMessage string            `json:"status_message,omitempty"`
+	ServiceName   string            `json:"service_name,omitempty"`
+	Attributes    map[string]string `json:"attributes,omitempty"`
+}
+
+// getTrace handles GET /api/v1/runs/{run_id}/trace.
+// Returns 503 when ClickHouse is not configured (CLICKHOUSE_URL unset).
+func (h *Handler) getTrace(w http.ResponseWriter, r *http.Request) {
+	if h.spanReader == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "trace service not configured: CLICKHOUSE_URL is not set",
+		})
+		return
+	}
+
+	runID := chi.URLParam(r, "run_id")
+	run, err := h.store.GetRun(r.Context(), runID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "getTrace: store.GetRun failed", "run_id", runID, "error", err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "run not found"})
+		return
+	}
+
+	spans, err := h.spanReader.GetTraceSpans(r.Context(), run.TraceID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "getTrace: GetTraceSpans failed",
+			"run_id", runID,
+			"trace_id", run.TraceID,
+			"error", err,
+		)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to load trace spans"})
+		return
+	}
+
+	const presignExpiry = time.Hour
+	resp := traceResponse{
+		TraceID: run.TraceID,
+		Spans:   make([]spanResponse, 0, len(spans)),
+	}
+
+	for _, s := range spans {
+		attrs := s.Attributes
+		if h.presigner != nil && len(attrs) > 0 {
+			attrs, err = h.presigner.PresignAttrs(attrs, presignExpiry)
+			if err != nil {
+				h.logger.ErrorContext(r.Context(), "getTrace: PresignAttrs failed",
+					"span_id", s.SpanID,
+					"error", err,
+				)
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to presign blob URLs"})
+				return
+			}
+		}
+		durMS := uint32(s.EndTime.Sub(s.StartTime).Milliseconds())
+		resp.Spans = append(resp.Spans, spanResponse{
+			SpanID:        s.SpanID,
+			ParentSpanID:  s.ParentSpanID,
+			RunID:         s.RunID,
+			TaskID:        s.TaskID,
+			AttemptNumber: s.AttemptNumber,
+			Name:          s.Name,
+			Kind:          s.Kind,
+			StartTime:     s.StartTime,
+			EndTime:       s.EndTime,
+			DurationMS:    durMS,
+			Status:        s.Status,
+			StatusMessage: s.StatusMessage,
+			ServiceName:   s.ServiceName,
+			Attributes:    attrs,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // writeJSON encodes v as JSON and writes it to w with the given status code.
