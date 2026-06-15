@@ -49,6 +49,14 @@ type llmCallQuerier interface {
 	ListLlmCalls(ctx context.Context, runID string) ([]clickhouse.LlmCallQueryRow, error)
 }
 
+// finetuneJobStorer manages finetune job CRUD in Postgres.
+type finetuneJobStorer interface {
+	CreateFinetuneJob(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error)
+	SetFinetuneJobRun(ctx context.Context, jobID, runID string) error
+	GetFinetuneJob(ctx context.Context, jobID string) (store.FinetuneJob, error)
+	ListFinetuneJobs(ctx context.Context) ([]store.FinetuneJob, error)
+}
+
 // Handler holds the dependencies for the REST API.
 type Handler struct {
 	store           store.Store
@@ -61,6 +69,7 @@ type Handler struct {
 	evalReader      evalQuerier      // nil → eval read endpoints return 503
 	retrievalReader retrievalQuerier // nil → retrievals endpoint returns 503
 	llmCallReader   llmCallQuerier   // nil → llm-calls endpoint returns 503
+	finetuneJobs    finetuneJobStorer // nil → finetune-jobs endpoints return 503
 }
 
 // NewHandler constructs a Handler with the given dependencies.
@@ -103,6 +112,13 @@ func (h *Handler) WithLlmCalls(r llmCallQuerier) *Handler {
 	return h
 }
 
+// WithFinetuneJobs adds Postgres finetune job CRUD to the handler.
+// Calling this enables POST/GET /api/v1/finetune-jobs.
+func (h *Handler) WithFinetuneJobs(fj finetuneJobStorer) *Handler {
+	h.finetuneJobs = fj
+	return h
+}
+
 // Router returns an http.Handler with all API routes registered.
 func (h *Handler) Router() http.Handler {
 	r := chi.NewRouter()
@@ -121,6 +137,10 @@ func (h *Handler) Router() http.Handler {
 
 	r.Get("/api/v1/retrievals", h.listRetrievals)
 	r.Get("/api/v1/llm-calls", h.listLlmCalls)
+
+	r.Post("/api/v1/finetune-jobs", h.createFinetuneJob)
+	r.Get("/api/v1/finetune-jobs", h.listFinetuneJobs)
+	r.Get("/api/v1/finetune-jobs/{job_id}", h.getFinetuneJob)
 
 	return r
 }
@@ -692,6 +712,139 @@ func (h *Handler) listLlmCalls(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// ── finetune-jobs endpoints ───────────────────────────────────────────────────
+
+// createFinetuneJobBody is the request body for POST /api/v1/finetune-jobs.
+type createFinetuneJobBody struct {
+	TrainSplit  string `json:"train_split"`
+	EvalSplit   string `json:"eval_split"`
+	CorpusAlias string `json:"corpus_alias"`
+}
+
+// createFinetuneJob handles POST /api/v1/finetune-jobs.
+// Creates a finetune_jobs row and dispatches a NATS task for the Python worker.
+func (h *Handler) createFinetuneJob(w http.ResponseWriter, r *http.Request) {
+	if h.finetuneJobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "finetune service not configured",
+		})
+		return
+	}
+
+	var body createFinetuneJobBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body: " + err.Error()})
+		return
+	}
+	if body.TrainSplit == "" || body.EvalSplit == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "train_split and eval_split are required"})
+		return
+	}
+	if body.CorpusAlias == "" {
+		body.CorpusAlias = "corpus.active"
+	}
+
+	job, err := h.finetuneJobs.CreateFinetuneJob(r.Context(), store.FinetuneJobInput{
+		TrainSplit:  body.TrainSplit,
+		EvalSplit:   body.EvalSplit,
+		CorpusAlias: body.CorpusAlias,
+	})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "createFinetuneJob: CreateFinetuneJob failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create finetune job"})
+		return
+	}
+
+	// Build task input JSON and create a run/task.
+	inputBytes, _ := json.Marshal(map[string]string{
+		"job_id":       job.ID,
+		"train_split":  body.TrainSplit,
+		"eval_split":   body.EvalSplit,
+		"corpus_alias": body.CorpusAlias,
+	})
+
+	run, task, err := h.store.CreateRun(r.Context(), store.CreateRunInput{
+		WorkflowName: "finetune_job",
+		Input:        inputBytes,
+		SubmittedBy:  "api",
+	})
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "createFinetuneJob: CreateRun failed", "job_id", job.ID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to create run for finetune job"})
+		return
+	}
+
+	if err := h.finetuneJobs.SetFinetuneJobRun(r.Context(), job.ID, run.ID); err != nil {
+		h.logger.WarnContext(r.Context(), "createFinetuneJob: SetFinetuneJobRun failed (non-fatal)",
+			"job_id", job.ID, "run_id", run.ID, "error", err)
+	}
+
+	env := &helixv1.TaskEnvelope{
+		TaskId:          task.ID,
+		RunId:           run.ID,
+		WorkflowName:    "finetune_job",
+		WorkflowVersion: 1,
+		NodeId:          "root",
+		InputJson:       inputBytes,
+		AttemptNumber:   1,
+		TraceId:         run.TraceID,
+		Deadline:        time.Now().Add(2 * time.Hour).Format(time.RFC3339),
+	}
+
+	if err := h.nats.PublishTaskEnvelope(r.Context(), "finetune_job", env); err != nil {
+		h.logger.ErrorContext(r.Context(), "createFinetuneJob: dispatch failed",
+			"job_id", job.ID, "run_id", run.ID, "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "job created but dispatch failed"})
+		return
+	}
+
+	h.logger.InfoContext(r.Context(), "finetune job created and dispatched",
+		"job_id", job.ID, "run_id", run.ID, "task_id", task.ID)
+
+	job.RunID = run.ID
+	writeJSON(w, http.StatusCreated, job)
+}
+
+// listFinetuneJobs handles GET /api/v1/finetune-jobs.
+func (h *Handler) listFinetuneJobs(w http.ResponseWriter, r *http.Request) {
+	if h.finetuneJobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "finetune service not configured",
+		})
+		return
+	}
+
+	jobs, err := h.finetuneJobs.ListFinetuneJobs(r.Context())
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "listFinetuneJobs: ListFinetuneJobs failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list finetune jobs"})
+		return
+	}
+	if jobs == nil {
+		jobs = []store.FinetuneJob{}
+	}
+	writeJSON(w, http.StatusOK, jobs)
+}
+
+// getFinetuneJob handles GET /api/v1/finetune-jobs/{job_id}.
+func (h *Handler) getFinetuneJob(w http.ResponseWriter, r *http.Request) {
+	if h.finetuneJobs == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
+			"error": "finetune service not configured",
+		})
+		return
+	}
+
+	jobID := chi.URLParam(r, "job_id")
+	job, err := h.finetuneJobs.GetFinetuneJob(r.Context(), jobID)
+	if err != nil {
+		h.logger.ErrorContext(r.Context(), "getFinetuneJob: GetFinetuneJob failed", "job_id", jobID, "error", err)
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "finetune job not found"})
+		return
+	}
+	writeJSON(w, http.StatusOK, job)
 }
 
 // writeJSON encodes v as JSON and writes it to w with the given status code.

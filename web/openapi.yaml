@@ -197,6 +197,82 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+  /finetune-jobs:
+    post:
+      operationId: createFinetuneJob
+      summary: Start a mine → train → promote finetune job.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFinetuneJobRequest"
+      responses:
+        "201":
+          description: Job created and dispatched.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinetuneJob"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listFinetuneJobs
+      summary: List finetune jobs (most recent first, up to 50).
+      responses:
+        "200":
+          description: Finetune jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinetuneJob"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /finetune-jobs/{job_id}:
+    get:
+      operationId: getFinetuneJob
+      summary: Fetch a single finetune job by ID.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Finetune job detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinetuneJob"
+        "404":
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
   /evals/{eval_id}/events:
     post:
       operationId: recordEvalEvents
@@ -488,3 +564,54 @@ components:
               details:
                 type: object
                 additionalProperties: true
+    FinetuneJob:
+      type: object
+      required: [id, status, train_split, eval_split, corpus_alias, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+          description: pending|mining|training|promoting|done|failed|promoted|archived|no_failures|no_triplets
+        train_split:
+          type: string
+        eval_split:
+          type: string
+        corpus_alias:
+          type: string
+        failures:
+          type: integer
+        triplets:
+          type: integer
+        before_recall:
+          type: number
+          format: double
+        after_recall:
+          type: number
+          format: double
+        outcome:
+          type: string
+          description: promoted|archived|no_failures|no_triplets|null
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateFinetuneJobRequest:
+      type: object
+      required: [train_split, eval_split]
+      properties:
+        train_split:
+          type: string
+          description: Path or alias of the training dataset.
+        eval_split:
+          type: string
+          description: Path or alias of the evaluation dataset.
+        corpus_alias:
+          type: string
+          description: Qdrant collection alias to mine and promote (default corpus.active).

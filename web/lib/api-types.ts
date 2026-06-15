@@ -140,6 +140,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/finetune-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List finetune jobs (most recent first, up to 50). */
+        get: operations["listFinetuneJobs"];
+        put?: never;
+        /** Start a mine → train → promote finetune job. */
+        post: operations["createFinetuneJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/finetune-jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch a single finetune job by ID. */
+        get: operations["getFinetuneJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/{eval_id}/events": {
         parameters: {
             query?: never;
@@ -287,6 +322,36 @@ export interface components {
                     [key: string]: unknown;
                 };
             }[];
+        };
+        FinetuneJob: {
+            id: string;
+            run_id?: string;
+            /** @description pending|mining|training|promoting|done|failed|promoted|archived|no_failures|no_triplets */
+            status: string;
+            train_split: string;
+            eval_split: string;
+            corpus_alias: string;
+            failures?: number;
+            triplets?: number;
+            /** Format: double */
+            before_recall?: number;
+            /** Format: double */
+            after_recall?: number;
+            /** @description promoted|archived|no_failures|no_triplets|null */
+            outcome?: string;
+            error?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        CreateFinetuneJobRequest: {
+            /** @description Path or alias of the training dataset. */
+            train_split: string;
+            /** @description Path or alias of the evaluation dataset. */
+            eval_split: string;
+            /** @description Qdrant collection alias to mine and promote (default corpus.active). */
+            corpus_alias?: string;
         };
     };
     responses: never;
@@ -535,6 +600,117 @@ export interface operations {
                 };
             };
             /** @description Eval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listFinetuneJobs: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finetune jobs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinetuneJob"][];
+                };
+            };
+            /** @description Finetune service not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    createFinetuneJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateFinetuneJobRequest"];
+            };
+        };
+        responses: {
+            /** @description Job created and dispatched. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinetuneJob"];
+                };
+            };
+            /** @description Invalid request body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Finetune service not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getFinetuneJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Finetune job detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FinetuneJob"];
+                };
+            };
+            /** @description Job not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Finetune service not configured. */
             503: {
                 headers: {
                     [name: string]: unknown;

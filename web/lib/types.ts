@@ -14,3 +14,5 @@ export type EvalSummary = components["schemas"]["EvalSummary"];
 export type EvalEvent = components["schemas"]["EvalEvent"];
 export type RetrievalRow = components["schemas"]["RetrievalRow"];
 export type LlmCallRow = components["schemas"]["LlmCallRow"];
+export type FinetuneJob = components["schemas"]["FinetuneJob"];
+export type CreateFinetuneJobRequest = components["schemas"]["CreateFinetuneJobRequest"];

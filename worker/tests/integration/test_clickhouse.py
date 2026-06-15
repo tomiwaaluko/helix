@@ -114,7 +114,7 @@ async def test_mine_from_clickhouse_returns_failures(monkeypatch: pytest.MonkeyP
     # doc-berlin is not in the retrieved results → should produce a failure case.
     assert len(cases) >= 1
     assert cases[0].query == "What is the capital of France?"
-    assert cases[0].gold_passage_id == "doc-berlin"
+    assert cases[0].gold_doc_id == "doc-berlin"
 
 
 @pytest.mark.asyncio

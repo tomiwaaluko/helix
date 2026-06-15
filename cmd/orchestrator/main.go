@@ -97,6 +97,16 @@ func main() {
 		}
 	}
 
+	// Finetune job store (reuses the same DATABASE_URL; shares the connection pool).
+	fjs, fjsErr := store.NewPostgresFinetuneJobStore(ctx, cfg.DatabaseURL)
+	if fjsErr != nil {
+		log.Warn("finetune job store init failed — finetune endpoints disabled", "err", fjsErr)
+	} else {
+		defer fjs.Close()
+		h = h.WithFinetuneJobs(fjs)
+		log.Info("finetune-jobs endpoints enabled")
+	}
+
 	// Start gRPC server
 	grpcAddr := fmt.Sprintf(":%d", cfg.GRPCPort)
 	lis, err := net.Listen("tcp", grpcAddr)
@@ -106,7 +116,11 @@ func main() {
 	}
 
 	grpcSrv := grpc.NewServer()
-	helixv1.RegisterOrchestratorServer(grpcSrv, grpcserver.NewServer(pg, nc, log))
+	grpcHandler := grpcserver.NewServer(pg, nc, log)
+	if fjs != nil {
+		grpcHandler = grpcHandler.WithFinetuneJobs(fjs)
+	}
+	helixv1.RegisterOrchestratorServer(grpcSrv, grpcHandler)
 
 	// Start HTTP server
 	httpAddr := fmt.Sprintf(":%d", cfg.HTTPPort)

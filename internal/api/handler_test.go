@@ -973,3 +973,138 @@ func TestListLlmCalls_PassesRunIdParam(t *testing.T) {
 		t.Errorf("want listFn called with run-xyz, got %q", calledWithRunID)
 	}
 }
+
+// ── finetune-jobs endpoints ───────────────────────────────────────────────────
+
+type mockFinetuneJobStorer struct {
+	createFn  func(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error)
+	setRunFn  func(ctx context.Context, jobID, runID string) error
+	getFn     func(ctx context.Context, jobID string) (store.FinetuneJob, error)
+	listFn    func(ctx context.Context) ([]store.FinetuneJob, error)
+}
+
+func (m *mockFinetuneJobStorer) CreateFinetuneJob(ctx context.Context, in store.FinetuneJobInput) (store.FinetuneJob, error) {
+	if m.createFn != nil {
+		return m.createFn(ctx, in)
+	}
+	return store.FinetuneJob{ID: "job-001", Status: "pending",
+		TrainSplit: in.TrainSplit, EvalSplit: in.EvalSplit, CorpusAlias: in.CorpusAlias}, nil
+}
+
+func (m *mockFinetuneJobStorer) SetFinetuneJobRun(ctx context.Context, jobID, runID string) error {
+	if m.setRunFn != nil {
+		return m.setRunFn(ctx, jobID, runID)
+	}
+	return nil
+}
+
+func (m *mockFinetuneJobStorer) GetFinetuneJob(ctx context.Context, jobID string) (store.FinetuneJob, error) {
+	if m.getFn != nil {
+		return m.getFn(ctx, jobID)
+	}
+	return store.FinetuneJob{ID: jobID, Status: "promoted"}, nil
+}
+
+func (m *mockFinetuneJobStorer) ListFinetuneJobs(ctx context.Context) ([]store.FinetuneJob, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx)
+	}
+	return []store.FinetuneJob{}, nil
+}
+
+func newFinetuneHandler(fj *mockFinetuneJobStorer) http.Handler {
+	h := api.NewHandler(&testutil.MockStore{}, &testutil.MockPublisher{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	h = h.WithFinetuneJobs(fj)
+	return h.Router()
+}
+
+func TestCreateFinetuneJob_Returns503_WhenNotConfigured(t *testing.T) {
+	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
+	body := strings.NewReader(`{"train_split":"train.jsonl","eval_split":"eval.jsonl"}`)
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/finetune-jobs", body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestCreateFinetuneJob_Returns400_WhenMissingSplit(t *testing.T) {
+	h := newFinetuneHandler(&mockFinetuneJobStorer{})
+	body := strings.NewReader(`{"train_split":"train.jsonl"}`) // missing eval_split
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/finetune-jobs", body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+}
+
+func TestCreateFinetuneJob_HappyPath_Returns201(t *testing.T) {
+	fj := &mockFinetuneJobStorer{}
+	h := newFinetuneHandler(fj)
+	body := strings.NewReader(`{"train_split":"train.jsonl","eval_split":"eval.jsonl"}`)
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/finetune-jobs", body))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("want 201, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp store.FinetuneJob
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.ID == "" {
+		t.Error("want non-empty job ID")
+	}
+}
+
+func TestListFinetuneJobs_Returns503_WhenNotConfigured(t *testing.T) {
+	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/finetune-jobs", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestListFinetuneJobs_ReturnsEmptyArray(t *testing.T) {
+	h := newFinetuneHandler(&mockFinetuneJobStorer{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/finetune-jobs", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), "[]") {
+		t.Errorf("want empty array, got %s", w.Body.String())
+	}
+}
+
+func TestGetFinetuneJob_Returns200(t *testing.T) {
+	fj := &mockFinetuneJobStorer{
+		getFn: func(_ context.Context, jobID string) (store.FinetuneJob, error) {
+			f := 10
+			return store.FinetuneJob{ID: jobID, Status: "promoted", Failures: &f}, nil
+		},
+	}
+	h := newFinetuneHandler(fj)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/finetune-jobs/job-001", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp store.FinetuneJob
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.Status != "promoted" {
+		t.Errorf("want status=promoted, got %q", resp.Status)
+	}
+}

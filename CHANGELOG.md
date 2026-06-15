@@ -1,5 +1,17 @@
 ## Unreleased
 
+- **M9b: Production failure miner.**
+  Migration `202606160001_finetune_jobs.sql` adds `finetune_jobs` table (run_id FK, status, metrics,
+  outcome). Go: `internal/store/finetune.go` (`FinetuneJobStore` interface + `PostgresFinetuneJobStore`);
+  HTTP routes `POST /api/v1/finetune-jobs`, `GET /api/v1/finetune-jobs`, `GET /api/v1/finetune-jobs/{job_id}`;
+  gRPC `CompleteTask` hook calls `FinalizeFinetuneJob` (best-effort) when a finetune_job task finishes.
+  Python: `_run_finetune_job()` in `worker/helix/worker/__main__.py` runs mine→train→promote using temp
+  SQLiteStore; `handle_finetune_job` registered as `"finetune_job"` workflow; `mine_from_clickhouse`
+  redesigned to mine all ClickHouse traces without requiring a prior eval run.
+  Web: BFF routes `web/app/api/finetune-jobs/`, `FinetuneJobTable` component, `/finetune-jobs` page,
+  nav link. OpenAPI schema updated with `FinetuneJob` + `CreateFinetuneJobRequest`.
+  3 new Python worker tests; 7 new Go handler tests; 4 new web component tests.
+
 - **M9a: Integration test suite.**
   Go: `internal/clickhouse/integration_test.go` (`//go:build integration`) — 6 tests covering
   all four writer/reader pairs (RetrievalWriter round-trip, LlmCallWriter round-trip,

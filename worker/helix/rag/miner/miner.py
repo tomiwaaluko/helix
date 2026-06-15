@@ -258,24 +258,30 @@ async def _ch_query(http_url: str, sql: str) -> list[dict[str, Any]]:
 
 
 async def mine_from_clickhouse(
-    examples: list[Example],
-    eval_results: list[EvalResultRow],
-    corpus: dict[str, str],
+    train_dataset: list[Any],
+    eval_results: list[EvalResultRow] | None = None,
+    corpus: dict[str, str] | None = None,
     *,
     ch_http_url: str,
     recall_scorer: str = _RECALL_SCORER,
     max_hard_negatives: int = 4,
 ) -> list[FailureCase]:
-    """Mine retrieval failures from ClickHouse ``spans`` + ``retrievals`` tables.
+    """Mine retrieval failures directly from ClickHouse ``spans`` + ``retrievals`` tables.
 
     Queries ClickHouse via its HTTP interface (``CLICKHOUSE_HTTP_URL``).
-    The resulting ``FailureCase`` list is identical in shape to the output of
-    ``mine_failures`` run over the equivalent JSONL spans.
+
+    When ``eval_results`` is non-empty, only examples with recall < 1.0 are mined
+    (mirrors the local ``mine_failures`` path). When absent or empty, every example
+    whose gold doc is missing from the retrieved set is treated as a failure — no
+    prior eval run is required (the normal production path).
+
+    Accepts both ``Example`` objects and plain dicts with ``id``, ``input``, and
+    ``expected_output`` keys (as returned by a JSONL dataset loader).
 
     Requires:
-    - The Go collector is running and has populated the ``spans`` table with
-      ``name='deep_research'`` workflow spans (OTel integration active).
-    - M7 retrieval fan-out has populated the ``retrievals`` table.
+    - The Go collector populates the ``spans`` table with ``name='deep_research'``
+      workflow spans (OTel integration active).
+    - M7 retrieval fan-out populates the ``retrievals`` table.
     """
     # Query workflow spans for question → trace_id mapping.
     wf_sql = (
@@ -283,23 +289,19 @@ async def mine_from_clickhouse(
         " FROM spans WHERE name = 'deep_research'"
     )
     wf_rows = await _ch_query(ch_http_url, wf_sql)
-    workflow_spans: list[dict[str, Any]] = [
-        {
-            "trace_id": row["trace_id"],
-            "kind": "workflow",
-            "name": "deep_research",
-            "attributes": {"question": row.get("question", "")},
-        }
-        for row in wf_rows
-        if row.get("question")
-    ]
+    question_to_trace: dict[str, str] = {}
+    for row in wf_rows:
+        q = row.get("question", "")
+        t = row.get("trace_id", "")
+        if q and t:
+            question_to_trace[q] = t
 
-    # Query retrievals table.
+    # Query retrievals table; key by trace_id.
     ret_rows = await _ch_query(
         ch_http_url,
         "SELECT trace_id, span_id, query, results FROM retrievals",
     )
-    retrieval_spans: list[dict[str, Any]] = []
+    retrieval_by_trace: dict[str, list[dict[str, Any]]] = {}
     for row in ret_rows:
         # ClickHouse Array(Tuple(passage_id, score, rank)) → JSONEachRow: [[id, score, rank], ...]
         raw: list[Any] = row.get("results", [])
@@ -308,32 +310,104 @@ async def mine_from_clickhouse(
             for r in raw
             if isinstance(r, (list, tuple)) and len(r) >= 2
         ]
-        retrieval_spans.append(
-            {
-                "trace_id": row.get("trace_id", ""),
-                "span_id": row.get("span_id", ""),
-                "kind": "retrieval",
-                "name": "retrieve",
-                "attributes": {
-                    "query": row.get("query", ""),
-                    "results": results,
-                },
-            }
-        )
+        trace = row.get("trace_id", "")
+        if trace:
+            retrieval_by_trace.setdefault(trace, []).append(
+                {
+                    "trace_id": trace,
+                    "span_id": row.get("span_id", ""),
+                    "kind": "retrieval",
+                    "name": "retrieve",
+                    "attributes": {
+                        "query": row.get("query", ""),
+                        "results": results,
+                    },
+                }
+            )
 
-    if not workflow_spans:
+    if not question_to_trace:
         _log.warning("mine_from_clickhouse: no workflow spans found in ClickHouse — returning []")
         return []
 
-    all_spans = workflow_spans + retrieval_spans
-    return mine_failures(
-        examples,
-        eval_results,
-        corpus,
-        spans=all_spans,
-        recall_scorer=recall_scorer,
-        max_hard_negatives=max_hard_negatives,
-    )
+    # When eval_results is non-empty, restrict to known failing examples.
+    failing_ids: set[str] | None
+    if eval_results:
+        failing_ids = {
+            r.example_id
+            for r in eval_results
+            if r.scorer == recall_scorer and r.score < 1.0
+        }
+    else:
+        failing_ids = None  # mine all — gold-vs-retrieved check is the gate
+
+    corpus_dict: dict[str, str] = corpus if corpus is not None else {}
+    cases: list[FailureCase] = []
+
+    for example in train_dataset:
+        # Accept both Example objects and plain dicts.
+        if isinstance(example, dict):
+            example_id = str(example.get("id", ""))
+            input_data: dict[str, Any] = example.get("input", {})
+            expected: dict[str, Any] = example.get("expected_output", {})
+        else:
+            example_id = str(getattr(example, "id", ""))
+            input_data = getattr(example, "input", {})
+            expected = getattr(example, "expected_output", {})
+
+        if failing_ids is not None and example_id not in failing_ids:
+            continue
+
+        question = str(input_data.get("question", ""))
+        trace_id = question_to_trace.get(question)
+        if not trace_id:
+            continue
+
+        r_spans = retrieval_by_trace.get(trace_id, [])
+        if not r_spans:
+            continue
+
+        all_gold: set[str] = {str(f["doc_id"]) for f in expected.get("supporting_facts", [])}
+        retrieved_union = _union_retrieved(r_spans)
+        missed = all_gold - retrieved_union
+        if not missed:
+            continue
+
+        for gold_doc_id in missed:
+            gold_text = corpus_dict.get(gold_doc_id, "")
+            rep_span = _best_retrieval_span(r_spans, all_gold)
+            if rep_span is None:
+                continue
+
+            rep_results: list[dict[str, Any]] = rep_span.get("attributes", {}).get("results", [])
+            retrieved_top_k = [
+                {"doc_id": r["doc_id"], "score": r.get("score", 0.0), "rank": i}
+                for i, r in enumerate(rep_results, start=1)
+            ]
+            hard_negatives = [
+                r["doc_id"] for r in rep_results if r.get("doc_id") not in all_gold
+            ][:max_hard_negatives]
+            rep_query: str = rep_span.get("attributes", {}).get("query") or question
+            sig = classify(
+                query=rep_query,
+                gold_text=gold_text,
+                retrieved_doc_ids=[r["doc_id"] for r in rep_results],
+                all_gold_doc_ids=all_gold,
+                missed_gold_doc_ids=missed,
+            )
+            cases.append(
+                FailureCase(
+                    example_id=example_id,
+                    span_id=rep_span.get("span_id", ""),
+                    query=rep_query,
+                    gold_doc_id=gold_doc_id,
+                    gold_text=gold_text,
+                    retrieved_top_k=retrieved_top_k,
+                    hard_negatives=hard_negatives,
+                    signature=sig,
+                )
+            )
+
+    return cases
 
 
 def to_store_row(case: FailureCase, *, case_id: str | None = None) -> FailureCaseRow:

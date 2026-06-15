@@ -1,8 +1,10 @@
 // Client-side data layer: calls the same-origin BFF (app/api/**), never the
 // orchestrator directly. Used by TanStack Query hooks in client components.
 import type {
+  CreateFinetuneJobRequest,
   EvalEvent,
   EvalSummary,
+  FinetuneJob,
   LlmCallRow,
   RetrievalRow,
   Run,
@@ -55,4 +57,25 @@ export function fetchRetrievals(runId?: string): Promise<RetrievalRow[]> {
 export function fetchLlmCalls(runId?: string): Promise<LlmCallRow[]> {
   const qs = runId ? `?run_id=${encodeURIComponent(runId)}` : "";
   return getJSON<LlmCallRow[]>(`/api/llm-calls${qs}`);
+}
+
+export function fetchFinetuneJobs(): Promise<FinetuneJob[]> {
+  return getJSON<FinetuneJob[]>("/api/finetune-jobs");
+}
+
+export function fetchFinetuneJob(jobId: string): Promise<FinetuneJob> {
+  return getJSON<FinetuneJob>(`/api/finetune-jobs/${encodeURIComponent(jobId)}`);
+}
+
+export async function createFinetuneJob(body: CreateFinetuneJobRequest): Promise<FinetuneJob> {
+  const res = await fetch("/api/finetune-jobs", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    throw new Error(`createFinetuneJob failed (${res.status}): ${detail}`);
+  }
+  return res.json() as Promise<FinetuneJob>;
 }

@@ -5,6 +5,52 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M9b)
+
+**Last commit:** (being committed now — see `git log -1` after push)
+
+**Working tree:** clean after commit
+
+**Current task:** M9b (Production Failure Miner) — COMPLETE
+
+**What shipped:**
+- `migrations/202606160001_finetune_jobs.sql` — new table: finetune_jobs (run_id FK, status, metrics, outcome)
+- `internal/store/finetune.go` — FinetuneJobStore interface + PostgresFinetuneJobStore
+- `internal/api/handler.go` — POST/GET /api/v1/finetune-jobs + GET /api/v1/finetune-jobs/{job_id}
+- `internal/api/handler_test.go` — 7 new tests for finetune job handler
+- `internal/grpc/server.go` — CompleteTask best-effort hook calls FinalizeFinetuneJob
+- `cmd/orchestrator/main.go` — wires PostgresFinetuneJobStore into HTTP handler + gRPC server
+- `worker/helix/rag/miner/miner.py` — mine_from_clickhouse redesigned (no prior eval run needed)
+- `worker/helix/worker/__main__.py` — _run_finetune_job() + handle_finetune_job registered
+- `worker/tests/test_finetune_worker.py` — 3 new Python tests
+- `worker/tests/integration/test_clickhouse.py` — fix gold_passage_id → gold_doc_id
+- `web/openapi.yaml` — FinetuneJob + CreateFinetuneJobRequest schemas + routes
+- `web/lib/api.ts`, `web/lib/types.ts` — new API client functions + types
+- `web/app/api/finetune-jobs/` — BFF proxy routes (GET + POST list, GET detail)
+- `web/components/finetune-job-table.tsx` — FinetuneJobTable + StatusBadge
+- `web/components/__tests__/finetune-job-table.test.tsx` — 4 web tests
+- `web/app/finetune-jobs/page.tsx` — /finetune-jobs dashboard page
+- `web/app/layout.tsx` — Fine-tune nav link
+
+**What's next:** M10 (or next milestone per vertical-slice-plan.md)
+
+**Open questions:** None
+
+**Gotchas:**
+- `@/components/ui/input` is NOT installed; use native `<input>` with Tailwind classes
+- mine_from_clickhouse no longer needs eval_results (mines all ClickHouse traces by default)
+- FinetuneJobStore is intentionally separate from Store interface (avoids touching MockStore)
+- gRPC CompleteTask hook for finetune is best-effort (WarnContext on error, never fails the task)
+
+```
+git log -1 --oneline
+(commit hash pending — session committing now)
+git status
+On branch claude/eloquent-clarke-qiha1x
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M9a)
 
 **Last commit:** (see below)

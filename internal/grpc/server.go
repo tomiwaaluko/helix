@@ -15,12 +15,18 @@ import (
 	"github.com/tomiwaaluko/helix/internal/store"
 )
 
+// finetuneJobCompleter is a narrow interface for updating finetune_jobs on task completion.
+type finetuneJobCompleter interface {
+	FinalizeFinetuneJob(ctx context.Context, taskID string, outputJSON []byte, taskStatus string) error
+}
+
 // Server implements helixv1.OrchestratorServer.
 type Server struct {
 	helixv1.UnimplementedOrchestratorServer
 
-	store  store.Store
-	logger *slog.Logger
+	store        store.Store
+	logger       *slog.Logger
+	finetuneJobs finetuneJobCompleter // optional; nil → no-op
 }
 
 // NewServer returns a new Server backed by the given store and dispatch client.
@@ -31,6 +37,13 @@ func NewServer(s store.Store, _ dispatch.Publisher, log *slog.Logger) *Server {
 		store:  s,
 		logger: log,
 	}
+}
+
+// WithFinetuneJobs wires an optional FinetuneJobStore for updating finetune job
+// status when a finetune_job task completes via CompleteTask.
+func (s *Server) WithFinetuneJobs(fj finetuneJobCompleter) *Server {
+	s.finetuneJobs = fj
+	return s
 }
 
 // RegisterWorker registers a worker and returns its ID and heartbeat lease.
@@ -127,6 +140,16 @@ func (s *Server) CompleteTask(ctx context.Context, req *helixv1.CompleteTaskRequ
 			"error", err,
 		)
 		return nil, status.Errorf(codes.Internal, "complete task: %v", err)
+	}
+
+	// Best-effort finetune job status sync (no-op for non-finetune tasks).
+	if s.finetuneJobs != nil && disposition == "accepted" {
+		if fjErr := s.finetuneJobs.FinalizeFinetuneJob(ctx, storeResult.TaskID, storeResult.OutputJSON, storeResult.Status); fjErr != nil {
+			s.logger.WarnContext(ctx, "FinalizeFinetuneJob failed (non-fatal)",
+				"task_id", storeResult.TaskID,
+				"error", fjErr,
+			)
+		}
 	}
 
 	s.logger.InfoContext(ctx, "task completed",
