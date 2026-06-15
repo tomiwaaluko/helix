@@ -1,5 +1,16 @@
 ## Unreleased
 
+- **M9a: Integration test suite.**
+  Go: `internal/clickhouse/integration_test.go` (`//go:build integration`) — 6 tests covering
+  all four writer/reader pairs (RetrievalWriter round-trip, LlmCallWriter round-trip,
+  EvalWriter round-trip with ListEvals + GetEval, BatchWriter + SpanReader round-trip) plus two
+  empty-run sentinel checks. Connects to a real ClickHouse via `CLICKHOUSE_URL` env var, calls
+  `ch.Open()` + `ch.RunDDL()`, uses `Stop()` to flush async writers before reading.
+  Python: `worker/tests/integration/test_clickhouse.py` — 2 async tests for `mine_from_clickhouse`
+  against a real ClickHouse seeded via HTTP INSERT; exercises the failure-detection and
+  no-failure paths end-to-end. `make test-integration` now runs both Python + Go integration
+  tests. Plan doc `docs/m9b-plan.md` added for the production failure miner (M9b).
+
 - **M8: LLM calls fan-out + cost dashboard.**
   Python: `_provider_from_model()` derives provider string from model name prefix;
   `_emit_llm_call_otel()` dual-writes a lightweight OTel span after each `llm_call` SpanLogger

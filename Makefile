@@ -94,9 +94,12 @@ test: web-test
 	cd worker && python3.12 -m pytest tests/ -x -q --ignore=tests/integration
 	go test ./cmd/... ./internal/... ./gen/... -count=1
 
-# End-to-end integration test (requires make dev running)
+# End-to-end integration test (requires make dev running).
+# Set CLICKHOUSE_URL, REDIS_URL, S3_ENDPOINT, and HELIX_INTEGRATION=1.
 test-integration:
-	cd worker && python3.12 -m pytest tests/integration/ -x -q -v
+	cd worker && HELIX_INTEGRATION=1 python3.12 -m pytest tests/integration/ -x -q -v
+	CLICKHOUSE_URL=$${CLICKHOUSE_URL:-clickhouse://localhost:9000?database=default} \
+	  go test -tags integration ./internal/... -count=1 -timeout 300s -v
 
 # ── Dashboard (web/) ──────────────────────────────────────────────────────────
 # Kept out of the node-free `make test`/`make lint` gate; run `make web-gate`

@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M9a)
+
+**Last commit:** (see below)
+
+**Branch:** `claude/eloquent-clarke-qiha1x`
+
+**What shipped (M9a — integration tests):**
+- `internal/clickhouse/integration_test.go` — 6 Go integration tests (`//go:build integration`):
+  `TestRetrievalWriter_RoundTrip`, `TestRetrievalReader_EmptyRun`, `TestLlmCallWriter_RoundTrip`,
+  `TestLlmCallReader_EmptyRun`, `TestEvalWriter_RoundTrip`, `TestBatchWriter_RoundTrip`.
+  Skips when `CLICKHOUSE_URL` unset; calls `Stop()` to flush async writers before asserting reads.
+- `worker/tests/integration/test_clickhouse.py` — 2 Python integration tests for `mine_from_clickhouse`
+  against a real ClickHouse (seeded via HTTP INSERT); skips when `HELIX_INTEGRATION` unset.
+- `Makefile` — `test-integration` now runs both Python (`HELIX_INTEGRATION=1`) + Go (`-tags integration`) tests.
+- `docs/m9b-plan.md` — plan doc for the production failure miner (M9b).
+
+**What's next (M9b — production failure miner):**
+- Read `docs/m9b-plan.md` for the full plan.
+- Postgres migration `finetune_jobs` table
+- Proto update `FinetuneJobTask`
+- Go orchestrator: `POST /api/v1/finetune-jobs`, `GET /api/v1/finetune-jobs`
+- Python worker `handle_finetune_job` task handler
+- Web dashboard for finetune jobs
+
+**Gotchas:**
+- Integration tests require `make dev` running + `CLICKHOUSE_URL` set (Go) / `HELIX_INTEGRATION=1` + `CLICKHOUSE_HTTP_URL` (Python)
+- `Stop()` on async writers (RetrievalWriter, LlmCallWriter, BatchWriter) closes the channel → goroutine drains → flush → exits. Safe to call without cancelling context first.
+- ClickHouse `PrepareBatch` + `Send()` is synchronous at the protocol level — data visible immediately after `Stop()`.
+
+```
+git log -1 --oneline
+(see below — pending commit)
+git status
+(M9a changes staged)
+```
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M8)
 
 **Last commit:** `696ced1` feat(m8): LLM calls fan-out + cost dashboard
