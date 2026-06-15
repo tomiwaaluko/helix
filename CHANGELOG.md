@@ -7,6 +7,15 @@
   paths). The actual hyperparameters (lr, batch_size, epochs, seed, etc.) are now stored and
   visible via `GET /api/v1/embedding-jobs/{id}`.
 
+- **M10-deferred: Intermediate embedding-job phase statuses.**
+  `emit_task_checkpoint(phase)` public helper in `remote_engine.py` uses a ContextVar
+  (`_current_task`) set around each handler invocation, letting workflow code emit
+  mining/training/evaluating status transitions without carrying a task_id parameter.
+  `_run_finetune_job` calls it at each phase boundary. Go: `UpdateEmbeddingJobPhase`
+  on `PostgresEmbeddingJobStore` (JOIN tasks→runs→workflows to locate the row);
+  gRPC `Checkpoint` handler parses `{"phase":"..."}` from state bytes and calls it
+  best-effort. Real-time phase visibility in `GET /api/v1/embedding-jobs/{id}`.
+
 - **M11: Helm/Kubernetes deployment charts.**
   `infra/helm/helix/` — production-ready Helm chart (v0.2.0) covering all nine stack
   components: orchestrator, collector, worker×2 (research + finetune_job pools), postgresql,

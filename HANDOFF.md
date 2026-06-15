@@ -5,39 +5,49 @@
 
 ---
 
-## 2026-06-15 — Claude Code → next session (M11: Helm charts)
+## 2026-06-15 — Claude Code → next session (M10-deferred + M11)
 
-**Last commit:** (see `git log -1 --oneline` after commit)
+**Last commit:** (being committed — run `git log -1 --oneline` to confirm)
 
 **Working tree:** clean after commit
 
-**Current task:** M11 — Helm/Kubernetes deployment charts. Complete.
+**Current task:** All remaining backlog items addressed this session.
 
 **What shipped:**
-- `infra/helm/helix/` — full Helm chart covering all 9 stack components.
-  Chart.yaml (helix v0.2.0), values.yaml (dev defaults), values-prod.yaml
-  (production replica counts + resource limits + storageClassName), _helpers.tpl
-  (fullname/labels/selectorLabels + URL-derivation helpers for all services),
-  NOTES.txt, secrets.yaml, orchestrator + collector Deployments + Services,
-  worker×2 Deployments (research + finetune_job pools in one file with `---`),
-  StatefulSets + headless + ClusterIP Services for postgresql/nats/clickhouse/minio/qdrant,
-  Deployment + Service for redis.
-- `infra/helm/README.md` — install, upgrade, first-time-setup, key values table.
-- `CHANGELOG.md` — M11 bullet expanded under `## Unreleased`.
+- **M10-deferred: TrainConfig capture** — `FinetuneTaskOutput.Config`, Python worker returns
+  `"config": train_result.config.to_dict()`, `UpdateEmbeddingJobOutcome` writes it to
+  `embedding_jobs.config`. Real hyperparameters now stored.
+- **M10-deferred: Intermediate phase statuses** — `emit_task_checkpoint(phase)` in
+  `remote_engine.py` uses a ContextVar (`_current_task`) set around each handler call;
+  `_run_finetune_job` emits mining/training/evaluating checkpoints; gRPC `Checkpoint`
+  handler calls `UpdateEmbeddingJobPhase` best-effort; `PostgresEmbeddingJobStore` has
+  the JOIN-based `UpdateEmbeddingJobPhase` method; `embeddingJobFinalizer` interface updated.
+- **M11: Helm/Kubernetes charts** — `infra/helm/helix/` covers all 9 stack components:
+  orchestrator, collector, worker×2 (research + finetune_job), postgresql, nats,
+  clickhouse, redis, minio, qdrant. Chart.yaml v0.2.0, values.yaml (dev defaults),
+  values-prod.yaml (prod replica counts + resource limits + storageClassName), _helpers.tpl
+  (fullname/labels/selectorLabels + URL derivation helpers), NOTES.txt, secrets.yaml
+  (single Secret with all connection strings), all Deployment/StatefulSet + Service templates,
+  `infra/helm/README.md`.
+- **Doc drift fixes** — AGENTS.md, CLAUDE.md, m6/m7 plan DRAFT banners, CHANGELOG v0.2.0 cut.
 
 **What's next (backlog):**
-- M10 deferred: intermediate embedding-job phase statuses (mining/training/evaluating),
-  MinIO presigned URLs for `artifact_uri`.
-- Production-scale eval (`make eval-full`).
-- Helm: ingress template (optional, needs nginx or similar), HorizontalPodAutoscaler,
-  PodDisruptionBudget for orchestrator.
+- MinIO presigned URLs for `embedding_jobs.artifact_uri` (worker doesn't upload yet)
+- Production-scale eval (`make eval-full`) — needs live cluster
+- Helm: ingress template, HPA for orchestrator, PodDisruptionBudget
+- Add `helm lint` to CI (no helm binary in this sandbox; validation was structural)
 
 **Open questions / gotchas:**
-- `helm lint` could not be run in this environment (no helm binary available via
-  network or package manager). Templates were validated by: brace-count check,
-  YAML-only file parse, cross-referencing all `include` calls against `_helpers.tpl`
-  definitions — all match. Linting should be done in CI before applying to a cluster.
-- MinIO port mapping: the compose file maps host:9100 → container:9000 to avoid
+- `helm lint` was not available in this sandbox. Templates validated structurally
+  (include names cross-referenced with _helpers.tpl, all matched). Run `helm lint` in CI.
+- MinIO: compose maps host:9100 → container:9000; the Helm chart uses containerPort 9100
+  directly (no host-port collision concern in k8s; consistent with the rest of the stack).
+- `emit_task_checkpoint` is a no-op when called outside a live RemoteEngine context
+  (e.g. in unit tests or local `make eval`). Tests don't need patching.
+
+```
+(git log -1 --oneline and git status to be confirmed after push)
+```
   ClickHouse's host:9000. In Kubernetes each pod has its own network namespace so
   there is no collision; MinIO is configured to listen on 9100 internally via the
   `--address :9100` arg, which matches `minio.apiPort: 9100` in values.yaml.
