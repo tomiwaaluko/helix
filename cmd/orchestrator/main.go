@@ -80,6 +80,12 @@ func main() {
 			sr := clickhouse.NewSpanReader(chConn)
 			h = h.WithTrace(sr, presigner)
 			log.Info("trace endpoint enabled", "clickhouse_url", cfg.ClickHouseURL)
+
+			// Eval read/write share the same connection.
+			ew := clickhouse.NewEvalWriter(chConn)
+			er := clickhouse.NewEvalReader(chConn)
+			h = h.WithEvals(ew, er)
+			log.Info("eval endpoints enabled")
 		}
 	}
 

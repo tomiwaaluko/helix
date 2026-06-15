@@ -23,6 +23,7 @@ from os import PathLike, fspath
 from pathlib import Path
 from typing import Any
 
+from helix.eval.reporter import EvalReporter
 from helix.logging import new_id
 from helix.runtime.sqlite_store import SqliteStore
 
@@ -163,6 +164,7 @@ async def evaluate(
     max_attempts: int = 3,
     retry_backoff: float = 2.0,
     tolerate_failures: bool = False,
+    reporter: EvalReporter | None = None,
 ) -> EvalReport:
     """Run ``workflow_fn`` over the dataset, score, persist, and aggregate.
 
@@ -201,11 +203,26 @@ async def evaluate(
                 raise
             return None
         scores: dict[str, float] = {}
+        events: list[dict[str, object]] = []
         for name, scorer in scorers.items():
             score, details = _as_score(scorer(example, output))
             scores[name] = score
             if store is not None:
                 await store.store_eval_result(run_id, example.id, name, score, details)
+            events.append(
+                {
+                    "example_id": example.id,
+                    "run_id": "",
+                    "scorer": name,
+                    "score": score,
+                    "passed": score >= 1.0,
+                    "details": details or {},
+                }
+            )
+        if reporter is not None:
+            # Best-effort: the reporter swallows its own errors; the SQLite store
+            # above holds the authoritative results regardless.
+            await reporter.record(run_id, events)
         return {"example_id": example.id, "scores": scores}
 
     raw: list[dict[str, Any] | None] = list(

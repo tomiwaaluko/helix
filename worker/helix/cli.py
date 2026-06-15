@@ -29,6 +29,7 @@ import click
 
 from helix.eval.corpus import load_corpus
 from helix.eval.harness import EvalReport, Example, Scorer, evaluate, load_dataset
+from helix.eval.reporter import default_reporter
 from helix.eval.scorers import (
     answer_f1,
     citation_precision,
@@ -323,9 +324,12 @@ async def _eval(
         qdrant_url=qdrant_url, qdrant_path=qdrant_path, bm25_path=bm25_path, span_logger=span_logger
     )
     deps = _make_deps(retriever, top_k=top_k, model=model, span_logger=span_logger)
+    reporter = default_reporter()
     async with adapter:
         with using_research_deps(deps):
-            report = await evaluate(_run_workflow, dataset, scorers, concurrency=concurrency)
+            report = await evaluate(
+                _run_workflow, dataset, scorers, concurrency=concurrency, reporter=reporter
+            )
     resolved_model = model or os.environ.get("HELIX_DEFAULT_MODEL", ADAPTER_DEFAULT_MODEL)
     embedder_name = retriever_embedder_name(retriever)
     return report, dataset, resolved_model, embedder_name

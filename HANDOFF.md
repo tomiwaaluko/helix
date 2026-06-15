@@ -5,6 +5,44 @@
 
 ---
 
+## 2026-06-15 — Claude Code → next session (M6)
+
+**Last commit:** (see below — committing at end of session)
+**Working tree:** clean after commit
+
+**Task plan position:** M6 complete per `docs/m6-plan.md`.
+
+**What shipped this session**
+
+- **M6: Eval views slice:**
+  - Go: `internal/clickhouse/eval_writer.go` — `EvalWriter.Record()` synchronous ClickHouse INSERT with per-query `async_insert=0` override; `batchConn` interface for testability
+  - Go: `internal/clickhouse/eval_reader.go` — `EvalReader.ListEvals()` (two queries: summaries + scorer means) and `GetEval()` per-example events
+  - Go: handler gains `evalWriter`/`evalQuerier` interfaces + `WithEvals(w, r)` setter; 3 new routes: `POST /api/v1/evals/{eval_id}/events`, `GET /api/v1/evals`, `GET /api/v1/evals/{eval_id}`; all return 503 when ClickHouse unconfigured
+  - Go tests: 11 new handler tests + 5 writer unit tests; all Go tests pass
+  - Python: `worker/helix/eval/reporter.py` — `EvalReporter` Protocol + `OrchestratorEvalReporter` (best-effort, swallows `httpx.HTTPError`) + `default_reporter()` factory
+  - Python: `evaluate()` in `harness.py` gains `reporter` param; `cli.py` wires `default_reporter()`
+  - Python tests: 7 reporter tests + 2 harness reporter tests; all 21 Python tests pass
+  - Web: `web/openapi.yaml` extended with `EvalSummary`, `EvalEvent`, `ScorerMean`, `RecordEvalEventsRequest`; `npm run gen:types` regenerated `api-types.ts`
+  - Web: BFF routes `web/app/api/evals/route.ts` + `web/app/api/evals/[id]/route.ts`
+  - Web: `<EvalTable>` — dynamic scorer columns, 10 s refetch, 503 UX; `<EvalDetail>` — metric cards + per-example table with green/red pass coloring
+  - Web: `/evals` + `/evals/[id]` pages; "Evals" nav link
+  - Web tests: 7 new vitest tests; all 38 tests pass; `tsc --noEmit` clean
+
+**Gates passing**
+- Go: all packages build; `go test ./cmd/... ./internal/... ./gen/...` green
+- Python: 21 pytest tests pass; ruff + mypy --strict clean
+- Web: 38 vitest tests pass; `tsc --noEmit` clean
+
+**What's next (M7)**
+- Retrieval miner: detect `kind=retrieval` spans from ClickHouse, classify failures, emit hard negatives for embedding fine-tune
+- Embedding trainer loop: sentence-transformers fine-tuning on mined hard negatives
+- Alias-swap promotion: canary eval before flipping Qdrant alias
+
+**Open questions**
+- None; M6 is complete and self-contained.
+
+---
+
 ## 2026-06-15 — Claude Code → next session (M5)
 
 **Last commit:** 707a823 feat(m5): trace endpoint, span-tree view, CI wiring

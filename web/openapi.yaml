@@ -97,6 +97,87 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CancelResponse"
+  /evals:
+    get:
+      operationId: listEvals
+      summary: List eval summaries (most recent first). Returns 503 when ClickHouse is not configured.
+      responses:
+        "200":
+          description: Eval summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EvalSummary"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evals/{eval_id}:
+    get:
+      operationId: getEval
+      summary: Fetch per-example events for an eval run.
+      parameters:
+        - in: path
+          name: eval_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-example eval events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EvalEvent"
+        "404":
+          description: Eval not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evals/{eval_id}/events:
+    post:
+      operationId: recordEvalEvents
+      summary: Record per-example eval scores from a Python harness run.
+      parameters:
+        - in: path
+          name: eval_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordEvalEventsRequest"
+      responses:
+        "204":
+          description: Events recorded.
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 components:
   schemas:
     RunStatus:
@@ -215,3 +296,78 @@ components:
       properties:
         error:
           type: string
+    ScorerMean:
+      type: object
+      required: [scorer, mean, n]
+      properties:
+        scorer:
+          type: string
+        mean:
+          type: number
+          format: double
+        n:
+          type: integer
+    EvalSummary:
+      type: object
+      required: [eval_id, examples, started_at, finished_at, scorers]
+      properties:
+        eval_id:
+          type: string
+        examples:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        scorers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorerMean"
+    EvalEvent:
+      type: object
+      required: [eval_id, example_id, scorer, score, passed, timestamp]
+      properties:
+        eval_id:
+          type: string
+        example_id:
+          type: string
+        run_id:
+          type: string
+        scorer:
+          type: string
+        score:
+          type: number
+          format: double
+        passed:
+          type: boolean
+        details:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    RecordEvalEventsRequest:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [example_id, scorer, score, passed]
+            properties:
+              example_id:
+                type: string
+              run_id:
+                type: string
+              scorer:
+                type: string
+              score:
+                type: number
+                format: double
+              passed:
+                type: boolean
+              details:
+                type: object
+                additionalProperties: true

@@ -72,6 +72,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List eval summaries (most recent first). Returns 503 when ClickHouse is not configured. */
+        get: operations["listEvals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/{eval_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch per-example events for an eval run. */
+        get: operations["getEval"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/{eval_id}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Record per-example eval scores from a Python harness run. */
+        post: operations["recordEvalEvents"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -134,6 +185,46 @@ export interface components {
         };
         ErrorResponse: {
             error?: string;
+        };
+        ScorerMean: {
+            scorer: string;
+            /** Format: double */
+            mean: number;
+            n: number;
+        };
+        EvalSummary: {
+            eval_id: string;
+            examples: number;
+            /** Format: date-time */
+            started_at: string;
+            /** Format: date-time */
+            finished_at: string;
+            scorers: components["schemas"]["ScorerMean"][];
+        };
+        EvalEvent: {
+            eval_id: string;
+            example_id: string;
+            run_id?: string;
+            scorer: string;
+            /** Format: double */
+            score: number;
+            passed: boolean;
+            details?: string;
+            /** Format: date-time */
+            timestamp: string;
+        };
+        RecordEvalEventsRequest: {
+            events: {
+                example_id: string;
+                run_id?: string;
+                scorer: string;
+                /** Format: double */
+                score: number;
+                passed: boolean;
+                details?: {
+                    [key: string]: unknown;
+                };
+            }[];
         };
     };
     responses: never;
@@ -255,6 +346,117 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CancelResponse"];
+                };
+            };
+        };
+    };
+    listEvals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Eval summaries. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalSummary"][];
+                };
+            };
+            /** @description Eval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getEval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Per-example eval events. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EvalEvent"][];
+                };
+            };
+            /** @description Eval not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Eval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    recordEvalEvents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                eval_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RecordEvalEventsRequest"];
+            };
+        };
+        responses: {
+            /** @description Events recorded. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid request body. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Eval service not configured (CLICKHOUSE_URL not set). */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
         };

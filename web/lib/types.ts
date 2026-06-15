@@ -9,3 +9,6 @@ export type RunStatus = components["schemas"]["RunStatus"];
 export type TaskStatus = components["schemas"]["TaskStatus"];
 export type SpanRecord = components["schemas"]["SpanRecord"];
 export type TraceResponse = components["schemas"]["TraceResponse"];
+export type ScorerMean = components["schemas"]["ScorerMean"];
+export type EvalSummary = components["schemas"]["EvalSummary"];
+export type EvalEvent = components["schemas"]["EvalEvent"];

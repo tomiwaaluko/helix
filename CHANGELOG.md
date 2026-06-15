@@ -1,5 +1,22 @@
 ## Unreleased
 
+- **M6: Eval views slice landed.**
+  Go: `POST /api/v1/evals/{eval_id}/events` persists per-example scores to ClickHouse
+  synchronously (overrides connection-level `async_insert=1` with per-query `async_insert=0`);
+  `GET /api/v1/evals` returns summaries (example count, scorer means); `GET /api/v1/evals/{eval_id}`
+  returns per-example events. All three return 503 when ClickHouse is unset.
+  New packages: `internal/clickhouse/eval_writer.go`, `internal/clickhouse/eval_reader.go`;
+  handler gains `WithEvals(w, r)` setter; 11 new Go handler tests + 5 writer unit tests.
+  Python: `helix/eval/reporter.py` adds `EvalReporter` Protocol + `OrchestratorEvalReporter`
+  (best-effort POST, swallows `httpx.HTTPError`; `default_reporter()` factory reads env vars);
+  `evaluate()` in `harness.py` gains `reporter` param; `cli.py` wires `default_reporter()`.
+  7 new reporter tests + 2 harness reporter tests.
+  Dashboard: `/evals` list page (`<EvalTable>` — dynamic scorer columns, 10 s refetch, 503 UX)
+  and `/evals/[id]` detail page (`<EvalDetail>` — metric cards + per-example score table,
+  green/red pass/fail coloring). BFF routes `web/app/api/evals/**` proxy with bearer token.
+  Nav updated. `web/openapi.yaml` extended with `EvalSummary`, `EvalEvent`, `ScorerMean`,
+  `RecordEvalEventsRequest` schemas; types regenerated. 7 new vitest tests.
+
 - **M5: Trace endpoint + dashboard trace view + CI wiring.**
   Go: `GET /api/v1/runs/{run_id}/trace` reads spans from ClickHouse by `trace_id`
   and rewrites `s3://` blob attributes to presigned MinIO HTTPS URLs (1h expiry).

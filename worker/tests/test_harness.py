@@ -120,6 +120,40 @@ async def test_evaluate_aggregates_and_persists(tmp_path: Path) -> None:
     assert len(loaded["per_example"]) == 10
 
 
+async def test_evaluate_posts_to_reporter(tmp_path: Path) -> None:
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 3)
+    dataset = load_dataset(path)
+    scorers = {"exact": _exact, "half": _half}
+
+    calls: list[tuple[str, list[dict[str, object]]]] = []
+
+    class _RecordingReporter:
+        async def record(self, eval_id: str, events: list[dict[str, object]]) -> None:
+            calls.append((eval_id, events))
+
+    report = await evaluate(
+        _double, dataset, scorers, eval_id="eval-rep", reporter=_RecordingReporter()
+    )
+
+    # One reporter call per example, each carrying one event per scorer.
+    assert len(calls) == len(report.per_example) == 3
+    for eval_id, events in calls:
+        assert eval_id == "eval-rep"
+        assert {e["scorer"] for e in events} == {"exact", "half"}
+        for e in events:
+            assert e["run_id"] == ""
+            assert isinstance(e["passed"], bool)
+
+
+async def test_evaluate_without_reporter_does_not_crash(tmp_path: Path) -> None:
+    path = tmp_path / "data.jsonl"
+    _write_dataset(path, 2)
+    dataset = load_dataset(path)
+    report = await evaluate(_double, dataset, {"exact": _exact})
+    assert len(report.per_example) == 2
+
+
 async def test_evaluate_is_deterministic(tmp_path: Path) -> None:
     path = tmp_path / "data.jsonl"
     _write_dataset(path, 10)

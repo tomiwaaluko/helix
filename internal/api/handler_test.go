@@ -60,6 +60,46 @@ func newTraceHandler(s *testutil.MockStore, sq *mockSpanQuerier, ap *mockPresign
 	return h.Router()
 }
 
+// ── eval test doubles ─────────────────────────────────────────────────────────
+
+type mockEvalWriter struct {
+	recorded []clickhouse.EvalEventRow
+	err      error
+}
+
+func (m *mockEvalWriter) Record(_ context.Context, rows []clickhouse.EvalEventRow) error {
+	if m.err != nil {
+		return m.err
+	}
+	m.recorded = append(m.recorded, rows...)
+	return nil
+}
+
+type mockEvalQuerier struct {
+	listFn func(ctx context.Context) ([]clickhouse.EvalSummaryRow, []clickhouse.ScorerMeanRow, error)
+	getFn  func(ctx context.Context, evalID string) ([]clickhouse.EvalEventRow, error)
+}
+
+func (m *mockEvalQuerier) ListEvals(ctx context.Context) ([]clickhouse.EvalSummaryRow, []clickhouse.ScorerMeanRow, error) {
+	if m.listFn != nil {
+		return m.listFn(ctx)
+	}
+	return []clickhouse.EvalSummaryRow{}, []clickhouse.ScorerMeanRow{}, nil
+}
+
+func (m *mockEvalQuerier) GetEval(ctx context.Context, evalID string) ([]clickhouse.EvalEventRow, error) {
+	if m.getFn != nil {
+		return m.getFn(ctx, evalID)
+	}
+	return []clickhouse.EvalEventRow{}, nil
+}
+
+func newEvalHandler(ew *mockEvalWriter, eq *mockEvalQuerier) http.Handler {
+	h := api.NewHandler(&testutil.MockStore{}, &testutil.MockPublisher{}, slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	h = h.WithEvals(ew, eq)
+	return h.Router()
+}
+
 // ── bearer auth ───────────────────────────────────────────────────────────────
 
 func TestBearerAuth_NoHeader_Returns401(t *testing.T) {
@@ -389,7 +429,7 @@ func TestGetTrace_HappyPath_ReturnsSpanTree(t *testing.T) {
 					TraceID: traceID, SpanID: "span-1", ParentSpanID: "",
 					Name: "task", Kind: "task",
 					StartTime: now, EndTime: now.Add(500 * time.Millisecond),
-					Status: "ok",
+					Status:     "ok",
 					Attributes: map[string]string{"model": "claude"},
 				},
 				{
@@ -481,6 +521,230 @@ func TestGetTrace_PresignError_Returns500(t *testing.T) {
 	}
 	h := newTraceHandler(&testutil.MockStore{}, sq, ap)
 	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/runs/run-abc/trace", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", w.Code)
+	}
+}
+
+// ── POST /api/v1/evals/{eval_id}/events ───────────────────────────────────────
+
+func TestRecordEvalEvents_NilWriter_Returns503(t *testing.T) {
+	// Handler without WithEvals → 503.
+	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
+	body := `{"events":[{"example_id":"ex-1","scorer":"answer_f1","score":0.5,"passed":false}]}`
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/evals/eval-1/events", strings.NewReader(body)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestRecordEvalEvents_HappyPath_Returns204(t *testing.T) {
+	ew := &mockEvalWriter{}
+	h := newEvalHandler(ew, &mockEvalQuerier{})
+	body := `{"events":[
+		{"example_id":"ex-1","run_id":"run-1","scorer":"answer_f1","score":0.5,"passed":false,"details":{"note":"x"}},
+		{"example_id":"ex-1","run_id":"run-1","scorer":"retrieval_recall@10","score":1.0,"passed":true},
+		{"example_id":"ex-2","run_id":"run-1","scorer":"answer_f1","score":0.0,"passed":false}
+	]}`
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/evals/eval-42/events", strings.NewReader(body)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusNoContent {
+		t.Fatalf("want 204, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(ew.recorded) != 3 {
+		t.Fatalf("want 3 recorded rows, got %d", len(ew.recorded))
+	}
+	for _, row := range ew.recorded {
+		if row.EvalID != "eval-42" {
+			t.Errorf("want eval_id=eval-42, got %q", row.EvalID)
+		}
+	}
+	// passed bool → uint8 mapping
+	if ew.recorded[1].Passed != 1 {
+		t.Errorf("want recall row passed=1, got %d", ew.recorded[1].Passed)
+	}
+	if ew.recorded[0].Passed != 0 {
+		t.Errorf("want f1 row passed=0, got %d", ew.recorded[0].Passed)
+	}
+	// details serialized to JSON
+	if !strings.Contains(ew.recorded[0].Details, `"note":"x"`) {
+		t.Errorf("want details JSON, got %q", ew.recorded[0].Details)
+	}
+}
+
+func TestRecordEvalEvents_EmptyEvents_Returns400(t *testing.T) {
+	h := newEvalHandler(&mockEvalWriter{}, &mockEvalQuerier{})
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/evals/eval-1/events", strings.NewReader(`{"events":[]}`)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+}
+
+func TestRecordEvalEvents_ScoreOutOfRange_Returns400(t *testing.T) {
+	ew := &mockEvalWriter{}
+	h := newEvalHandler(ew, &mockEvalQuerier{})
+	body := `{"events":[{"example_id":"ex-1","scorer":"answer_f1","score":1.5,"passed":true}]}`
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/evals/eval-1/events", strings.NewReader(body)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("want 400, got %d", w.Code)
+	}
+	if len(ew.recorded) != 0 {
+		t.Errorf("no rows should be recorded on validation failure, got %d", len(ew.recorded))
+	}
+}
+
+func TestRecordEvalEvents_WriterError_Returns500(t *testing.T) {
+	ew := &mockEvalWriter{err: fmt.Errorf("clickhouse down")}
+	h := newEvalHandler(ew, &mockEvalQuerier{})
+	body := `{"events":[{"example_id":"ex-1","scorer":"answer_f1","score":0.5,"passed":false}]}`
+	r := authed(httptest.NewRequest(http.MethodPost, "/api/v1/evals/eval-1/events", strings.NewReader(body)))
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Fatalf("want 500, got %d", w.Code)
+	}
+}
+
+// ── GET /api/v1/evals ─────────────────────────────────────────────────────────
+
+func TestListEvals_NilReader_Returns503(t *testing.T) {
+	h := newHandler(&testutil.MockStore{}, &testutil.MockPublisher{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("want 503, got %d", w.Code)
+	}
+}
+
+func TestListEvals_HappyPath_JoinsScorerMeans(t *testing.T) {
+	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	eq := &mockEvalQuerier{
+		listFn: func(_ context.Context) ([]clickhouse.EvalSummaryRow, []clickhouse.ScorerMeanRow, error) {
+			return []clickhouse.EvalSummaryRow{
+					{EvalID: "eval-1", Examples: 100, StartedAt: now, FinishedAt: now.Add(time.Minute)},
+				},
+				[]clickhouse.ScorerMeanRow{
+					{EvalID: "eval-1", Scorer: "answer_f1", Mean: 0.15, N: 100},
+					{EvalID: "eval-1", Scorer: "retrieval_recall@10", Mean: 0.65, N: 100},
+				}, nil
+		},
+	}
+	h := newEvalHandler(&mockEvalWriter{}, eq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp []struct {
+		EvalID   string `json:"eval_id"`
+		Examples uint64 `json:"examples"`
+		Scorers  []struct {
+			Scorer string  `json:"scorer"`
+			Mean   float64 `json:"mean"`
+			N      uint64  `json:"n"`
+		} `json:"scorers"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(resp) != 1 {
+		t.Fatalf("want 1 eval, got %d", len(resp))
+	}
+	if resp[0].EvalID != "eval-1" || resp[0].Examples != 100 {
+		t.Errorf("unexpected summary: %+v", resp[0])
+	}
+	if len(resp[0].Scorers) != 2 {
+		t.Fatalf("want 2 scorer means, got %d", len(resp[0].Scorers))
+	}
+}
+
+func TestListEvals_Empty_ReturnsEmptyArray(t *testing.T) {
+	h := newEvalHandler(&mockEvalWriter{}, &mockEvalQuerier{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d", w.Code)
+	}
+	if !strings.HasPrefix(strings.TrimSpace(w.Body.String()), "[") {
+		t.Errorf("want JSON array, got %q", w.Body.String())
+	}
+}
+
+// ── GET /api/v1/evals/{eval_id} ───────────────────────────────────────────────
+
+func TestGetEval_NotFound_Returns404(t *testing.T) {
+	// Default querier returns an empty slice → 404.
+	h := newEvalHandler(&mockEvalWriter{}, &mockEvalQuerier{})
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals/missing", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("want 404, got %d", w.Code)
+	}
+}
+
+func TestGetEval_HappyPath_ReturnsEvents(t *testing.T) {
+	now := time.Date(2026, 6, 15, 0, 0, 0, 0, time.UTC)
+	eq := &mockEvalQuerier{
+		getFn: func(_ context.Context, evalID string) ([]clickhouse.EvalEventRow, error) {
+			return []clickhouse.EvalEventRow{
+				{EvalID: evalID, ExampleID: "ex-1", RunID: "run-1", Scorer: "answer_f1", Score: 0.5, Passed: 0, Timestamp: now},
+				{EvalID: evalID, ExampleID: "ex-1", RunID: "run-1", Scorer: "retrieval_recall@10", Score: 1.0, Passed: 1, Timestamp: now},
+			}, nil
+		},
+	}
+	h := newEvalHandler(&mockEvalWriter{}, eq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals/eval-9", nil))
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp []struct {
+		ExampleID string  `json:"example_id"`
+		Scorer    string  `json:"scorer"`
+		Score     float64 `json:"score"`
+		Passed    bool    `json:"passed"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if len(resp) != 2 {
+		t.Fatalf("want 2 events, got %d", len(resp))
+	}
+	if !resp[1].Passed {
+		t.Errorf("want recall event passed=true, got false")
+	}
+}
+
+func TestGetEval_ReaderError_Returns500(t *testing.T) {
+	eq := &mockEvalQuerier{
+		getFn: func(_ context.Context, _ string) ([]clickhouse.EvalEventRow, error) {
+			return nil, fmt.Errorf("clickhouse down")
+		},
+	}
+	h := newEvalHandler(&mockEvalWriter{}, eq)
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/evals/eval-9", nil))
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	if w.Code != http.StatusInternalServerError {

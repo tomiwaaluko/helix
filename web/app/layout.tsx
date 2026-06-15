@@ -20,9 +20,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               <Link href="/runs" className="font-semibold">
                 Helix
               </Link>
-              <nav className="text-sm text-muted-foreground">
+              <nav className="flex gap-4 text-sm text-muted-foreground">
                 <Link href="/runs" className="hover:text-foreground">
                   Runs
+                </Link>
+                <Link href="/evals" className="hover:text-foreground">
+                  Evals
                 </Link>
               </nav>
             </div>
