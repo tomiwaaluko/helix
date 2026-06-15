@@ -1,6 +1,13 @@
 ## Unreleased
 
-_Nothing yet._
+- **M10-deferred: TrainConfig captured into embedding_jobs.config.**
+  `FinetuneTaskOutput` gains a `Config json.RawMessage` field; Python worker adds
+  `"config": train_result.config.to_dict()` to the return dict; `UpdateEmbeddingJobOutcome`
+  accepts and writes `configJSON` to `embedding_jobs.config` (falls back to `{}` on no-training
+  paths). The actual hyperparameters (lr, batch_size, epochs, seed, etc.) are now stored and
+  visible via `GET /api/v1/embedding-jobs/{id}`.
+
+- **M11: Helm/Kubernetes deployment** *(in progress — see `infra/helm/`)*
 
 ## v0.2.0 — 2026-06-15
 
