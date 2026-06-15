@@ -7,8 +7,8 @@
 
 ## 2026-06-15 — Claude Code → next session (M5)
 
-**Last commit:** afdac87 (plan doc only; M5 implementation commit follows — see `git log -1`)
-**Working tree:** M5 changes staged, pending commit + push
+**Last commit:** 707a823 feat(m5): trace endpoint, span-tree view, CI wiring
+**Working tree:** clean
 
 **Task plan position:** M5 complete per `docs/m5-plan.md` definition of done.
 
