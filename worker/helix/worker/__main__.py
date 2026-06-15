@@ -186,6 +186,7 @@ async def _run_finetune_job(
         "after_recall": after,
         "failures": len(cases),
         "triplets": train_result.triplets_count,
+        "config": train_result.config.to_dict(),
     }
 
 

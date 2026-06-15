@@ -38,13 +38,14 @@ type FinetuneJobInput struct {
 
 // FinetuneTaskOutput is the shape of the CompleteTask output_json for finetune_job tasks.
 type FinetuneTaskOutput struct {
-	JobID        string  `json:"job_id"`
-	Outcome      string  `json:"outcome"` // "promoted" | "archived" | "no_failures" | "no_triplets"
-	BeforeRecall float64 `json:"before_recall"`
-	AfterRecall  float64 `json:"after_recall"`
-	Failures     int     `json:"failures"`
-	Triplets     int     `json:"triplets"`
-	Error        string  `json:"error,omitempty"`
+	JobID        string          `json:"job_id"`
+	Outcome      string          `json:"outcome"` // "promoted" | "archived" | "no_failures" | "no_triplets"
+	BeforeRecall float64         `json:"before_recall"`
+	AfterRecall  float64         `json:"after_recall"`
+	Failures     int             `json:"failures"`
+	Triplets     int             `json:"triplets"`
+	Config       json.RawMessage `json:"config,omitempty"` // TrainConfig as JSON; empty when no training ran
+	Error        string          `json:"error,omitempty"`
 }
 
 // FinetuneJobStore manages finetune_jobs in Postgres.

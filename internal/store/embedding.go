@@ -38,7 +38,8 @@ type EmbeddingJobStore interface {
 
 	// UpdateEmbeddingJobOutcome updates an embedding job when its finetune job completes.
 	// Looks up the row via finetune_job_id. Best-effort: no-op when no matching row exists.
-	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON []byte, promoted bool) error
+	// configJSON is the TrainConfig as JSON (may be nil when no training ran).
+	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, promoted bool) error
 }
 
 // PostgresEmbeddingJobStore implements EmbeddingJobStore against Postgres.
@@ -185,6 +186,7 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 	status string,
 	triplets int,
 	metricsJSON []byte,
+	configJSON []byte,
 	promoted bool,
 ) error {
 	promotedExpr := "NULL"
@@ -192,11 +194,17 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 		promotedExpr = "now()"
 	}
 
+	cfg := configJSON
+	if len(cfg) == 0 {
+		cfg = []byte("{}")
+	}
+
 	query := fmt.Sprintf(`
 		UPDATE embedding_jobs
 		SET    status         = $2,
 		       triplets_count = $3,
 		       metrics        = $4,
+		       config         = $5,
 		       promoted_at    = %s
 		WHERE  finetune_job_id = $1`, promotedExpr)
 
@@ -205,6 +213,7 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 		status,
 		triplets,
 		metricsJSON,
+		cfg,
 	)
 	if err != nil {
 		return fmt.Errorf("embedding store: update outcome: %w", err)
