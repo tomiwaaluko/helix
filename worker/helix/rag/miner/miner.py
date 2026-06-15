@@ -333,9 +333,7 @@ async def mine_from_clickhouse(
     failing_ids: set[str] | None
     if eval_results:
         failing_ids = {
-            r.example_id
-            for r in eval_results
-            if r.scorer == recall_scorer and r.score < 1.0
+            r.example_id for r in eval_results if r.scorer == recall_scorer and r.score < 1.0
         }
     else:
         failing_ids = None  # mine all — gold-vs-retrieved check is the gate
@@ -383,9 +381,9 @@ async def mine_from_clickhouse(
                 {"doc_id": r["doc_id"], "score": r.get("score", 0.0), "rank": i}
                 for i, r in enumerate(rep_results, start=1)
             ]
-            hard_negatives = [
-                r["doc_id"] for r in rep_results if r.get("doc_id") not in all_gold
-            ][:max_hard_negatives]
+            hard_negatives = [r["doc_id"] for r in rep_results if r.get("doc_id") not in all_gold][
+                :max_hard_negatives
+            ]
             rep_query: str = rep_span.get("attributes", {}).get("query") or question
             sig = classify(
                 query=rep_query,

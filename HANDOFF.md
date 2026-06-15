@@ -5,10 +5,45 @@
 
 ---
 
-## 2026-06-15 — Claude Code → next session (M10: wire embedding_jobs)
+## 2026-06-15 — Claude Code → next session (M10: embedding-jobs view)
 
-**Last commit:** a1c5f6e feat(M10-partial): embedding-jobs Go store, migration, and read/write handler  
-*(pre-M10 commit on branch; M10 changes not yet committed as of this entry — commit follows)*
+**Last commit:** 22e1894 feat(M10): complete embedding-jobs wiring — gRPC hook, orchestrator, web dashboard
+
+**Working tree:** clean after commit
+
+**Current task:** M10 (Embedding-jobs read path + promotion view) — COMPLETE
+
+**What shipped:**
+- `migrations/202606160002_embedding_jobs_finetune_link.sql` — `finetune_job_id` FK + index on `embedding_jobs` (up-only)
+- `internal/store/embedding.go` — `EmbeddingJobStore` interface + `PostgresEmbeddingJobStore`
+- `internal/api/handler.go` — `embeddingJobStorer` interface, `WithEmbeddingJobs`, `GET /api/v1/embedding-jobs` + `/{id}`, best-effort create in `createFinetuneJob`
+- `internal/grpc/server.go` — `embeddingJobFinalizer` interface, `WithEmbeddingJobs`, best-effort `UpdateEmbeddingJobOutcome` in `CompleteTask`
+- `cmd/orchestrator/main.go` — `PostgresEmbeddingJobStore` wired into handler + gRPC
+- `internal/api/handler_test.go` — 4 new Go handler tests
+- `web/openapi.yaml` — `EmbeddingJob` schema + `/embedding-jobs` paths
+- `web/lib/api-types.ts` — regenerated
+- `web/lib/types.ts`, `web/lib/api.ts` — `EmbeddingJob` type alias + `fetchEmbeddingJobs`/`fetchEmbeddingJob`
+- `web/app/api/embedding-jobs/` — BFF proxy routes
+- `web/components/embedding-job-table.tsx` — table with base model, status, triplets, Δrecall, promoted_at
+- `web/components/__tests__/embedding-job-table.test.tsx` — 4 web tests
+- `web/app/embeddings/page.tsx` + nav link
+
+**What's next:** M11 or next direction per vertical-slice-plan.md / maintainer preference
+
+**Open questions:** None
+
+**Gotchas:**
+- `embedding_jobs` rows are created best-effort in `createFinetuneJob` (WarnContext, non-fatal)
+- `UpdateEmbeddingJobOutcome` in gRPC hook is also best-effort — never fails CompleteTask
+- Metrics field in `EmbeddingJob` is `json.RawMessage`; web casts via `(job.metrics as {...})?.before?.mean`
+- Web test uses `findAllByText("promoted")` (not `findByText`) to handle status badge + any other match
+
+```
+git log -1 --oneline
+22e1894 feat(M10): complete embedding-jobs wiring — gRPC hook, orchestrator, web dashboard
+git status
+(formatting-only changes in worker/helix/rag/miner/miner.py and worker/tests/test_finetune_worker.py — committed next)
+```
 
 **Working tree:** Uncommitted M10 changes (see below)
 

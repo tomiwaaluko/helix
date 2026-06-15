@@ -59,7 +59,10 @@ async def test_run_finetune_job_promoted(tmp_path: Any, span_logger: SpanLogger)
         patch("helix.worker.__main__.SqliteStore") as MockStore,
         patch("helix.worker.__main__.QdrantAdapter"),
         patch("helix.worker.__main__.load_dataset", return_value=[MagicMock()]),
-        patch.dict("os.environ", {"HELIX_CORPUS_PATH": "data/corpus.jsonl", "QDRANT_URL": "http://localhost:6333"}),
+        patch.dict(
+            "os.environ",
+            {"HELIX_CORPUS_PATH": "data/corpus.jsonl", "QDRANT_URL": "http://localhost:6333"},
+        ),
     ):
         mock_mine.return_value = [_CASE]
         mock_promote.return_value = _PROMOTE_RESULT
