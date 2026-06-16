@@ -5,13 +5,38 @@
 
 ---
 
-## 2026-06-15 — Claude Code → next session (M10-deferred + M11)
+## 2026-06-16 — Claude Code → next session (artifact upload + helm CI)
 
-**Last commit:** (being committed — run `git log -1 --oneline` to confirm)
+**Last commit:** (run `git log -1 --oneline` to confirm)
 
 **Working tree:** clean after commit
 
-**Current task:** All remaining backlog items addressed this session.
+**Current task:** Closed the last functional gap (artifact_uri) + added Helm CI.
+
+**What shipped:**
+- **Model-artifact upload + presign** (commit `a11933e`) — `BlobStore.put_artifact`,
+  worker tars `output_dir` (in a thread) → MinIO → `FinetuneTaskOutput.artifact_uri` →
+  gRPC hook writes `embedding_jobs.artifact_uri` (COALESCE-guarded) → `GET /api/v1/embedding-jobs`
+  presigns it via the trace endpoint's `attrPresigner`. `/embeddings` page gains an Artifact
+  download column. No-op when `S3_ENDPOINT` unset. 1 Python + 1 Go test.
+- **`.github/workflows/helm-lint.yml`** — runs `helm lint` + `helm template` for default and
+  prod values on chart changes. Closes the "couldn't run helm lint in sandbox" gap.
+
+**Remaining backlog (all infra-gated / polish):**
+- Helm: ingress, HPA, PodDisruptionBudget templates (optional polish).
+- Production-scale eval (`make eval-full`) — needs a live cluster + GPU; cannot run here.
+- Broader CI (full `make lint && make test` gate) — deferred: can't validate an Actions
+  workflow from this sandbox, and a broken gate is worse than none.
+
+**Gotchas:**
+- `BlobStore.put_artifact` loads the whole tarball into memory (fine for v1; a ~0.5 GB
+  model is heavy but acceptable). Streaming upload is a future optimization.
+- `artifact_uri` is presigned on read using the SAME presigner the trace endpoint uses
+  (`WithTrace`); if the orchestrator is built without S3, artifact URIs stay as raw `s3://`.
+- Chart structurally verified here (all 13 `include`s match a `define`; all value keys exist),
+  but real `helm lint` only runs in the new CI job — no helm binary in this sandbox.
+
+**Earlier this session (M10-deferred + M11):**
 
 **What shipped:**
 - **M10-deferred: TrainConfig capture** — `FinetuneTaskOutput.Config`, Python worker returns
