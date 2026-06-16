@@ -1,0 +1,15 @@
+{{- if .Values.orchestrator.pdb.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "helix.fullname" . }}-orchestrator
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: orchestrator
+spec:
+  minAvailable: {{ .Values.orchestrator.pdb.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "helix.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: orchestrator
+{{- end }}

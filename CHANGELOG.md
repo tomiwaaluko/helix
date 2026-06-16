@@ -26,6 +26,13 @@
   gRPC `Checkpoint` handler parses `{"phase":"..."}` from state bytes and calls it
   best-effort. Real-time phase visibility in `GET /api/v1/embedding-jobs/{id}`.
 
+- **M11-polish: Helm HPA, PodDisruptionBudget, Ingress + helm-lint CI.**
+  Added optional `orchestrator-hpa.yaml` (autoscaling/v2 HPA), `orchestrator-pdb.yaml`
+  (policy/v1 PDB), and `ingress.yaml` (networking.k8s.io/v1) templates, all gated behind
+  `enabled` flags (off by default; `values-prod.yaml` enables HPA 2–6 + PDB). New
+  `.github/workflows/helm-lint.yml` runs `helm lint` + `helm template` for both default and
+  prod values on any `infra/helm/**` change.
+
 - **M11: Helm/Kubernetes deployment charts.**
   `infra/helm/helix/` — production-ready Helm chart (v0.2.0) covering all nine stack
   components: orchestrator, collector, worker×2 (research + finetune_job pools), postgresql,

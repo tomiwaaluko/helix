@@ -10,6 +10,14 @@ orchestrator:
     limits:
       cpu: 500m
       memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
 
 collector:
   replicaCount: 2

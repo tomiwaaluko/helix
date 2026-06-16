@@ -122,6 +122,14 @@ kubectl delete pvc -n helix -l app.kubernetes.io/instance=helix
 | `clickhouse.storage` | `20Gi` | ClickHouse PVC size |
 | `minio.storage` | `20Gi` | MinIO PVC size |
 | `qdrant.storage` | `10Gi` | Qdrant PVC size |
+| `orchestrator.autoscaling.enabled` | `false` | Orchestrator HPA (needs metrics-server) |
+| `orchestrator.pdb.enabled` | `false` | Orchestrator PodDisruptionBudget |
+| `ingress.enabled` | `false` | Expose the orchestrator REST API via Ingress |
+| `ingress.host` | `helix.local` | Ingress host (set for your cluster) |
+
+The production values file (`values-prod.yaml`) enables the orchestrator HPA (2–6 replicas)
+and PodDisruptionBudget. Ingress stays disabled by default — enable it and set
+`ingress.host` / `ingress.className` for your cluster's ingress controller.
 
 For the full list see `infra/helm/helix/values.yaml`. Production overrides
 (higher replicas, resource requests/limits, storageClassName) are in

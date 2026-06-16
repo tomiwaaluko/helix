@@ -20,6 +20,16 @@ orchestrator:
   #   limits:
   #     cpu: 500m
   #     memory: 1Gi
+  # Optional HorizontalPodAutoscaler (needs metrics-server in the cluster).
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  # Optional PodDisruptionBudget.
+  pdb:
+    enabled: false
+    minAvailable: 1
 
 # ---------------------------------------------------------------------------
 # Collector (Go OTel ingestion: OTLP/gRPC → ClickHouse)
@@ -120,6 +130,22 @@ qdrant:
   grpcPort: 6334
   storage: 10Gi
   storageClassName: ""
+
+# ---------------------------------------------------------------------------
+# Ingress (optional; routes external traffic to the orchestrator REST API).
+# Disabled by default — enable and set host/className for your cluster.
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: helix.local
+  path: /
+  pathType: Prefix
+  tls: []
+  #  - secretName: helix-tls
+  #    hosts:
+  #      - helix.local
 
 # ---------------------------------------------------------------------------
 # Secrets
