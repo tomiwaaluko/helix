@@ -60,12 +60,13 @@ export function EmbeddingJobTable() {
           <TableHead>After %</TableHead>
           <TableHead>Δ Recall</TableHead>
           <TableHead>Promoted At</TableHead>
+          <TableHead>Artifact</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {isLoading ? (
           <TableRow>
-            <TableCell colSpan={8}>
+            <TableCell colSpan={9}>
               <Skeleton className="h-6 w-full" />
             </TableCell>
           </TableRow>
@@ -96,12 +97,26 @@ export function EmbeddingJobTable() {
                 <TableCell className="text-xs">
                   {job.promoted_at ? new Date(job.promoted_at).toLocaleDateString() : "—"}
                 </TableCell>
+                <TableCell className="text-xs">
+                  {job.artifact_uri ? (
+                    <a
+                      href={job.artifact_uri}
+                      className="text-blue-600 underline"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      download
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </TableCell>
               </TableRow>
             );
           })
         ) : (
           <TableRow>
-            <TableCell colSpan={8} className="text-center text-muted-foreground">
+            <TableCell colSpan={9} className="text-center text-muted-foreground">
               No embedding jobs yet.
             </TableCell>
           </TableRow>

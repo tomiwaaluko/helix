@@ -1196,6 +1196,42 @@ func TestGetEmbeddingJob_OK_Returns200(t *testing.T) {
 	}
 }
 
+func TestGetEmbeddingJob_PresignsArtifactURI(t *testing.T) {
+	uri := "s3://helix-blobs/artifacts/emb-001.tar.gz"
+	ej := &mockEmbeddingJobStorer{
+		getFn: func(_ context.Context, jobID string) (store.EmbeddingJob, error) {
+			return store.EmbeddingJob{ID: jobID, BaseModel: "m", Status: "promoted", ArtifactURI: &uri}, nil
+		},
+	}
+	ap := &mockPresigner{
+		fn: func(attrs map[string]string, _ time.Duration) (map[string]string, error) {
+			out := map[string]string{}
+			for k, v := range attrs {
+				out[k] = "https://signed.example/" + v
+			}
+			return out, nil
+		},
+	}
+	h := api.NewHandler(&testutil.MockStore{}, &testutil.MockPublisher{},
+		slog.New(slog.NewTextHandler(io.Discard, nil)), testToken)
+	h = h.WithEmbeddingJobs(ej).WithTrace(&mockSpanQuerier{}, ap)
+	router := h.Router()
+
+	r := authed(httptest.NewRequest(http.MethodGet, "/api/v1/embedding-jobs/emb-001", nil))
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("want 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var resp store.EmbeddingJob
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("invalid JSON: %v", err)
+	}
+	if resp.ArtifactURI == nil || !strings.HasPrefix(*resp.ArtifactURI, "https://signed.example/") {
+		t.Errorf("want presigned artifact_uri, got %v", resp.ArtifactURI)
+	}
+}
+
 func TestGetEmbeddingJob_NotFound_Returns404(t *testing.T) {
 	ej := &mockEmbeddingJobStorer{
 		getFn: func(_ context.Context, jobID string) (store.EmbeddingJob, error) {

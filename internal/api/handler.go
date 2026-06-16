@@ -23,6 +23,9 @@ type spanQuerier interface {
 	GetTraceSpans(ctx context.Context, traceID string) ([]clickhouse.SpanRow, error)
 }
 
+// presignExpiry is how long presigned blob/artifact GET URLs remain valid.
+const presignExpiry = time.Hour
+
 // attrPresigner rewrites s3:// URIs in span attributes to presigned GET URLs.
 type attrPresigner interface {
 	PresignAttrs(attrs map[string]string, expiry time.Duration) (map[string]string, error)
@@ -391,7 +394,6 @@ func (h *Handler) getTrace(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	const presignExpiry = time.Hour
 	resp := traceResponse{
 		TraceID: run.TraceID,
 		Spans:   make([]spanResponse, 0, len(spans)),
@@ -905,7 +907,27 @@ func (h *Handler) listEmbeddingJobs(w http.ResponseWriter, r *http.Request) {
 	if jobs == nil {
 		jobs = []store.EmbeddingJob{}
 	}
+	for i := range jobs {
+		h.presignArtifact(r.Context(), &jobs[i])
+	}
 	writeJSON(w, http.StatusOK, jobs)
+}
+
+// presignArtifact rewrites a job's s3:// artifact_uri to a presigned HTTPS GET URL
+// in place. No-op when no presigner is configured or the URI is absent/non-s3.
+// Best-effort: a presign failure leaves the original URI untouched.
+func (h *Handler) presignArtifact(ctx context.Context, job *store.EmbeddingJob) {
+	if h.presigner == nil || job.ArtifactURI == nil || !strings.HasPrefix(*job.ArtifactURI, "s3://") {
+		return
+	}
+	signed, err := h.presigner.PresignAttrs(map[string]string{"u": *job.ArtifactURI}, presignExpiry)
+	if err != nil {
+		h.logger.WarnContext(ctx, "presignArtifact failed (non-fatal)", "uri", *job.ArtifactURI, "error", err)
+		return
+	}
+	if u, ok := signed["u"]; ok {
+		job.ArtifactURI = &u
+	}
 }
 
 // getEmbeddingJob handles GET /api/v1/embedding-jobs/{job_id}.
@@ -924,5 +946,6 @@ func (h *Handler) getEmbeddingJob(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "embedding job not found"})
 		return
 	}
+	h.presignArtifact(r.Context(), &job)
 	writeJSON(w, http.StatusOK, job)
 }

@@ -1,5 +1,15 @@
 ## Unreleased
 
+- **M10-deferred: Model-artifact upload + presigned download.**
+  The trained checkpoint is now tar+gzipped and uploaded to MinIO
+  (`s3://helix-blobs/artifacts/<job_id>.tar.gz`) via the new `BlobStore.put_artifact`;
+  the worker returns the URI in `FinetuneTaskOutput.artifact_uri`, the gRPC hook writes it
+  to `embedding_jobs.artifact_uri` (COALESCE-guarded), and `GET /api/v1/embedding-jobs[/{id}]`
+  presigns any `s3://` artifact URI to an HTTPS GET URL (reusing the trace endpoint's
+  `attrPresigner`). The `/embeddings` dashboard gains an Artifact download column. No-op when
+  `S3_ENDPOINT` is unset (degrades to no artifact). Tarring runs in a worker thread.
+  1 new Python worker test, 1 new Go handler test.
+
 - **M10-deferred: TrainConfig captured into embedding_jobs.config.**
   `FinetuneTaskOutput` gains a `Config json.RawMessage` field; Python worker adds
   `"config": train_result.config.to_dict()` to the return dict; `UpdateEmbeddingJobOutcome`

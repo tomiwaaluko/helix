@@ -101,6 +101,25 @@ class BlobStore:
         )
         return str(url)
 
+    async def put_artifact(self, data: bytes, job_id: str) -> str:
+        """Store a model-checkpoint tarball under ``artifacts/<job_id>.tar.gz``.
+
+        Unlike :meth:`put` (dated span-payload keys), embedding-job artifacts use a
+        stable, job-addressable key so the ``embedding_jobs.artifact_uri`` reference
+        is reproducible. Returns the ``s3://`` URI.
+        """
+        key = f"artifacts/{job_id}.tar.gz"
+        sha = hashlib.sha256(data).hexdigest()
+        await asyncio.to_thread(
+            lambda: self._client.put_object(
+                Bucket=self._bucket,
+                Key=key,
+                Body=data,
+                Metadata={"sha256": sha},
+            )
+        )
+        return f"s3://{self._bucket}/{key}"
+
 
 def _parse_s3_uri(uri: str) -> tuple[str, str]:
     parsed = urlparse(uri)

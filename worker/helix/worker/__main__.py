@@ -14,8 +14,10 @@ and reports completion via gRPC CompleteTask.
 from __future__ import annotations
 
 import asyncio
+import io
 import logging
 import os
+import tarfile
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -88,6 +90,40 @@ def _build_deps(
         rate_limiter=rate_limiter,
         blob_store=blob_store,
     )
+
+
+def _tar_dir(output_dir: str) -> bytes | None:
+    """Tar+gzip a directory to bytes (blocking; run via ``asyncio.to_thread``).
+
+    Returns ``None`` when the directory does not exist.
+    """
+    if not Path(output_dir).is_dir():
+        return None
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+        tar.add(output_dir, arcname=Path(output_dir).name)
+    return buf.getvalue()
+
+
+async def _upload_artifact(output_dir: str, job_id: str) -> str | None:
+    """Tar a trained checkpoint directory and upload it to MinIO.
+
+    Returns the ``s3://`` artifact URI, or ``None`` when MinIO is unconfigured
+    (``S3_ENDPOINT`` unset) or the checkpoint directory does not exist — so the
+    promote path degrades gracefully without blob storage. The filesystem-bound
+    tarring runs in a worker thread to avoid blocking the event loop.
+    """
+    blob_store = BlobStore.from_env()
+    if blob_store is None:
+        return None
+
+    data = await asyncio.to_thread(_tar_dir, output_dir)
+    if data is None:
+        return None
+
+    uri = await blob_store.put_artifact(data, job_id)
+    logger.info("finetune_job %s: uploaded checkpoint → %s", job_id, uri)
+    return uri
 
 
 async def _run_finetune_job(
@@ -182,7 +218,11 @@ async def _run_finetune_job(
         before,
         after,
     )
-    return {
+
+    # Upload the trained checkpoint to MinIO (no-op when S3 is unconfigured).
+    artifact_uri = await _upload_artifact(output_dir, job_id)
+
+    result: dict[str, Any] = {
         "job_id": job_id,
         "outcome": promote_result.status,
         "before_recall": before,
@@ -191,6 +231,9 @@ async def _run_finetune_job(
         "triplets": train_result.triplets_count,
         "config": train_result.config.to_dict(),
     }
+    if artifact_uri is not None:
+        result["artifact_uri"] = artifact_uri
+    return result
 
 
 @click.command()

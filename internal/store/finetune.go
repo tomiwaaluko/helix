@@ -44,7 +44,8 @@ type FinetuneTaskOutput struct {
 	AfterRecall  float64         `json:"after_recall"`
 	Failures     int             `json:"failures"`
 	Triplets     int             `json:"triplets"`
-	Config       json.RawMessage `json:"config,omitempty"` // TrainConfig as JSON; empty when no training ran
+	Config       json.RawMessage `json:"config,omitempty"`       // TrainConfig as JSON; empty when no training ran
+	ArtifactURI  string          `json:"artifact_uri,omitempty"` // s3:// URI of the uploaded checkpoint; empty when S3 unset
 	Error        string          `json:"error,omitempty"`
 }
 

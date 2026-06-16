@@ -23,7 +23,7 @@ type finetuneJobCompleter interface {
 
 // embeddingJobFinalizer is a narrow interface for finalizing embedding_jobs on task completion.
 type embeddingJobFinalizer interface {
-	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, promoted bool) error
+	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, artifactURI string, promoted bool) error
 	UpdateEmbeddingJobPhase(ctx context.Context, taskID, phase string) error
 }
 
@@ -180,7 +180,7 @@ func (s *Server) CompleteTask(ctx context.Context, req *helixv1.CompleteTaskRequ
 				ejStatus = "done"
 			}
 			if ejErr := s.embeddingJobs.UpdateEmbeddingJobOutcome(
-				ctx, out.JobID, ejStatus, out.Triplets, metricsJSON, out.Config, out.Outcome == "promoted",
+				ctx, out.JobID, ejStatus, out.Triplets, metricsJSON, out.Config, out.ArtifactURI, out.Outcome == "promoted",
 			); ejErr != nil {
 				s.logger.WarnContext(ctx, "UpdateEmbeddingJobOutcome failed (non-fatal)",
 					"task_id", storeResult.TaskID,

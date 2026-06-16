@@ -88,6 +88,53 @@ async def test_run_finetune_job_promoted(tmp_path: Any, span_logger: SpanLogger)
     assert result["triplets"] == 3
     assert result["before_recall"] == pytest.approx(0.72)
     assert result["after_recall"] == pytest.approx(0.81)
+    # No S3 configured (BlobStore.from_env returns None) → no artifact_uri key.
+    assert "artifact_uri" not in result
+
+
+@pytest.mark.asyncio
+async def test_run_finetune_job_uploads_artifact(tmp_path: Any, span_logger: SpanLogger) -> None:
+    """When S3 is configured, the checkpoint is tarred + uploaded and the URI returned."""
+    output_dir = tmp_path / "art-job"
+    output_dir.mkdir()
+    (output_dir / "model.bin").write_bytes(b"weights")
+
+    blob = MagicMock()
+    blob.put_artifact = AsyncMock(return_value="s3://helix-blobs/artifacts/art-job.tar.gz")
+
+    with (
+        patch("helix.worker.__main__.mine_from_clickhouse", new_callable=AsyncMock) as mock_mine,
+        patch("helix.worker.__main__.build_triplets", return_value=[_TRIPLET]),
+        patch("helix.worker.__main__.train_embedding", return_value=_TRAIN_RESULT),
+        patch("helix.worker.__main__.promote_candidate", new_callable=AsyncMock) as mock_promote,
+        patch("helix.worker.__main__.SqliteStore") as MockStore,
+        patch("helix.worker.__main__.QdrantAdapter"),
+        patch("helix.worker.__main__.load_dataset", return_value=[MagicMock()]),
+        patch("helix.worker.__main__.BlobStore.from_env", return_value=blob),
+        patch.dict("os.environ", {"S3_ENDPOINT": "http://localhost:9100"}),
+    ):
+        mock_mine.return_value = [_CASE]
+        mock_promote.return_value = _PROMOTE_RESULT
+        store_instance = AsyncMock()
+        store_instance.__aenter__ = AsyncMock(return_value=store_instance)
+        store_instance.__aexit__ = AsyncMock(return_value=False)
+        store_instance.create_embedding_job = AsyncMock(return_value=MagicMock(id="e"))
+        MockStore.return_value = store_instance
+
+        result = await _run_finetune_job(
+            job_id="art-job",
+            train_split="t.jsonl",
+            eval_split="e.jsonl",
+            ch_http_url="http://localhost:8123",
+            models_dir=str(tmp_path),
+            span_logger=span_logger,
+        )
+
+    assert result["artifact_uri"] == "s3://helix-blobs/artifacts/art-job.tar.gz"
+    blob.put_artifact.assert_awaited_once()
+    # The uploaded payload is a non-empty gzip tarball.
+    uploaded_bytes = blob.put_artifact.await_args.args[0]
+    assert isinstance(uploaded_bytes, bytes) and len(uploaded_bytes) > 0
 
 
 @pytest.mark.asyncio

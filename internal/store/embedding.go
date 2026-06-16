@@ -39,7 +39,8 @@ type EmbeddingJobStore interface {
 	// UpdateEmbeddingJobOutcome updates an embedding job when its finetune job completes.
 	// Looks up the row via finetune_job_id. Best-effort: no-op when no matching row exists.
 	// configJSON is the TrainConfig as JSON (may be nil when no training ran).
-	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, promoted bool) error
+	// artifactURI is the s3:// URI of the uploaded checkpoint ("" leaves it NULL).
+	UpdateEmbeddingJobOutcome(ctx context.Context, finetuneJobID, status string, triplets int, metricsJSON, configJSON []byte, artifactURI string, promoted bool) error
 
 	// UpdateEmbeddingJobPhase sets an intermediate status on the embedding job linked to taskID.
 	// Looks up via tasks→runs→embedding_jobs join.
@@ -193,6 +194,7 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 	triplets int,
 	metricsJSON []byte,
 	configJSON []byte,
+	artifactURI string,
 	promoted bool,
 ) error {
 	promotedExpr := "NULL"
@@ -205,12 +207,19 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 		cfg = []byte("{}")
 	}
 
+	// NULL artifact_uri when empty; COALESCE keeps any previously-set value.
+	var artifact *string
+	if artifactURI != "" {
+		artifact = &artifactURI
+	}
+
 	query := fmt.Sprintf(`
 		UPDATE embedding_jobs
 		SET    status         = $2,
 		       triplets_count = $3,
 		       metrics        = $4,
 		       config         = $5,
+		       artifact_uri   = COALESCE($6, artifact_uri),
 		       promoted_at    = %s
 		WHERE  finetune_job_id = $1`, promotedExpr)
 
@@ -220,6 +229,7 @@ func (s *PostgresEmbeddingJobStore) UpdateEmbeddingJobOutcome(
 		triplets,
 		metricsJSON,
 		cfg,
+		artifact,
 	)
 	if err != nil {
 		return fmt.Errorf("embedding store: update outcome: %w", err)
