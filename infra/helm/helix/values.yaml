@@ -1,0 +1,159 @@
+# Default values for helix.
+# Override with --set or a values file.
+
+# ---------------------------------------------------------------------------
+# Orchestrator (Go control plane: REST + gRPC)
+# ---------------------------------------------------------------------------
+orchestrator:
+  image:
+    repository: ghcr.io/tomiwaaluko/helix-orchestrator
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 8080
+  grpcPort: 50051
+  resources: {}
+  # resources:
+  #   requests:
+  #     cpu: 200m
+  #     memory: 512Mi
+  #   limits:
+  #     cpu: 500m
+  #     memory: 1Gi
+  # Optional HorizontalPodAutoscaler (needs metrics-server in the cluster).
+  autoscaling:
+    enabled: false
+    minReplicas: 1
+    maxReplicas: 4
+    targetCPUUtilizationPercentage: 70
+  # Optional PodDisruptionBudget.
+  pdb:
+    enabled: false
+    minAvailable: 1
+
+# ---------------------------------------------------------------------------
+# Collector (Go OTel ingestion: OTLP/gRPC → ClickHouse)
+# ---------------------------------------------------------------------------
+collector:
+  image:
+    repository: ghcr.io/tomiwaaluko/helix-collector
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  port: 4317
+  resources: {}
+
+# ---------------------------------------------------------------------------
+# Worker (Python: deep_research pool)
+# ---------------------------------------------------------------------------
+worker:
+  image:
+    repository: ghcr.io/tomiwaaluko/helix-worker
+    tag: "0.2.0"
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  pool: research
+  resources: {}
+
+  # Finetune-job worker pool (separate deployment)
+  finetune:
+    replicaCount: 1
+    pool: finetune_job
+    resources: {}
+
+# ---------------------------------------------------------------------------
+# PostgreSQL 15
+# ---------------------------------------------------------------------------
+postgresql:
+  image: postgres:15
+  pullPolicy: IfNotPresent
+  port: 5432
+  database: helix
+  user: helix
+  storage: 10Gi
+  storageClassName: ""
+
+# ---------------------------------------------------------------------------
+# NATS 2 (JetStream)
+# ---------------------------------------------------------------------------
+nats:
+  image: "nats:2-alpine"
+  pullPolicy: IfNotPresent
+  port: 4222
+  monitorPort: 8222
+  storage: 5Gi
+  storageClassName: ""
+
+# ---------------------------------------------------------------------------
+# ClickHouse 24
+# ---------------------------------------------------------------------------
+clickhouse:
+  image: "clickhouse/clickhouse-server:24"
+  pullPolicy: IfNotPresent
+  port: 8123
+  nativePort: 9000
+  database: default
+  user: default
+  storage: 20Gi
+  storageClassName: ""
+
+# ---------------------------------------------------------------------------
+# Redis 7
+# ---------------------------------------------------------------------------
+redis:
+  image: "redis:7-alpine"
+  pullPolicy: IfNotPresent
+  port: 6379
+  resources: {}
+
+# ---------------------------------------------------------------------------
+# MinIO
+# ---------------------------------------------------------------------------
+minio:
+  image: "minio/minio:latest"
+  pullPolicy: IfNotPresent
+  apiPort: 9100
+  consolePort: 9101
+  storage: 20Gi
+  storageClassName: ""
+  bucket: helix-blobs
+  rootUser: helix
+  # rootPassword set via secrets.minioRootPassword
+
+# ---------------------------------------------------------------------------
+# Qdrant
+# ---------------------------------------------------------------------------
+qdrant:
+  image: "qdrant/qdrant:v1.9.0"
+  pullPolicy: IfNotPresent
+  port: 6333
+  grpcPort: 6334
+  storage: 10Gi
+  storageClassName: ""
+
+# ---------------------------------------------------------------------------
+# Ingress (optional; routes external traffic to the orchestrator REST API).
+# Disabled by default — enable and set host/className for your cluster.
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: helix.local
+  path: /
+  pathType: Prefix
+  tls: []
+  #  - secretName: helix-tls
+  #    hosts:
+  #      - helix.local
+
+# ---------------------------------------------------------------------------
+# Secrets
+# All values here end up in a Kubernetes Secret. Override in real installs
+# with --set or a sealed-secret; never commit real values.
+# ---------------------------------------------------------------------------
+secrets:
+  apiToken: "dev-token"
+  postgresPassword: "helix"
+  minioRootPassword: "helixhelix"
+  clickhousePassword: ""

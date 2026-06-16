@@ -122,9 +122,21 @@ Every choice below is justified against the alternatives we considered. Where th
 
 ### sentence-transformers for fine-tuning
 
-**Pick:** `sentence-transformers` + PyTorch for the fine-tuning loop.
+**Pick:** `sentence-transformers` + PyTorch for the fine-tuning loop, with `accelerate` as the training backend.
 
-**Why:** Mature library, sensible defaults, native InfoNCE loss support, integrates with HuggingFace model hub for sharing fine-tuned checkpoints.
+**Why:** Mature library, sensible defaults, native InfoNCE loss support, integrates with HuggingFace model hub for sharing fine-tuned checkpoints. `sentence-transformers` `.fit()` delegates to `transformers.Trainer`, which requires `accelerate>=1.1.0` even for single-device CPU training; it is pinned explicitly in `worker/pyproject.toml` so the trainer is not a runtime-only surprise.
+
+### tiktoken for chunk sizing
+
+**Pick:** `tiktoken` with the `cl100k_base` encoding for the indexer's chunker.
+
+**Why:** Fast, dependency-light token counting to size chunks consistently. It is not tied to the embedding or generation model — it only needs to be a stable proxy for length, and `cl100k_base` is good enough for that.
+
+### HuggingFace datasets for corpus/eval seeding
+
+**Pick:** `datasets` to download HotpotQA distractor-dev for the seed scripts.
+
+**Why:** Canonical, cached loader for HotpotQA; keeps the corpus + question prep reproducible from a clean checkout. Only the thin `scripts/` wrappers touch it — the formatting logic in `helix.eval.corpus` is pure and dataset-agnostic.
 
 ## Frontend
 

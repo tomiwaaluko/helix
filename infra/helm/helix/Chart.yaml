@@ -1,0 +1,13 @@
+apiVersion: v2
+name: helix
+description: Distributed agent runtime with embedding fine-tune loop
+type: application
+version: 0.2.0
+appVersion: "0.2.0"
+keywords:
+  - agent
+  - rag
+  - embedding
+  - observability
+maintainers:
+  - name: helix

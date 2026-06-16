@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-collector
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: collector
+  ports:
+    - name: otlp-grpc
+      port: {{ .Values.collector.port }}
+      targetPort: otlp-grpc
+      protocol: TCP

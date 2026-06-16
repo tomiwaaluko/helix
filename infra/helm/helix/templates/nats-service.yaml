@@ -1,0 +1,46 @@
+# Headless service for stable DNS (StatefulSet pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-nats-headless
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+  ports:
+    - name: client
+      port: {{ .Values.nats.port }}
+      targetPort: client
+      protocol: TCP
+    - name: monitor
+      port: {{ .Values.nats.monitorPort }}
+      targetPort: monitor
+      protocol: TCP
+---
+# ClusterIP service for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-nats
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: nats
+  ports:
+    - name: client
+      port: {{ .Values.nats.port }}
+      targetPort: client
+      protocol: TCP
+    - name: monitor
+      port: {{ .Values.nats.monitorPort }}
+      targetPort: monitor
+      protocol: TCP

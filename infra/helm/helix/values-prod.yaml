@@ -1,0 +1,78 @@
+# Production overrides for helix Helm chart.
+# Apply with: helm upgrade helix infra/helm/helix -f infra/helm/helix/values-prod.yaml
+
+orchestrator:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 200m
+      memory: 512Mi
+    limits:
+      cpu: 500m
+      memory: 1Gi
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+collector:
+  replicaCount: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi
+
+worker:
+  replicaCount: 3
+  resources:
+    requests:
+      cpu: 500m
+      memory: 2Gi
+    limits:
+      cpu: 1000m
+      memory: 4Gi
+  finetune:
+    replicaCount: 2
+    resources:
+      requests:
+        cpu: 500m
+        memory: 2Gi
+      limits:
+        cpu: 2000m
+        memory: 8Gi
+
+postgresql:
+  storage: 50Gi
+  storageClassName: "standard"
+
+nats:
+  storage: 20Gi
+  storageClassName: "standard"
+
+clickhouse:
+  storage: 200Gi
+  storageClassName: "standard"
+
+minio:
+  storage: 200Gi
+  storageClassName: "standard"
+
+qdrant:
+  storage: 50Gi
+  storageClassName: "standard"
+
+redis:
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: 300m
+      memory: 512Mi

@@ -1,0 +1,697 @@
+openapi: 3.0.3
+info:
+  title: Helix REST API (runs subset)
+  version: "1.0.0"
+  description: >
+    Hand-maintained subset of the orchestrator REST API used by the M4 dashboard.
+    Source of truth for web/lib/api-types.ts (generated via `npm run gen:types`).
+    Mirrors the Go JSON shapes in internal/store and internal/api. Expand as the
+    dashboard grows; replace with an orchestrator-emitted schema when available.
+servers:
+  - url: /api/v1
+paths:
+  /runs:
+    get:
+      operationId: listRuns
+      summary: List runs, optionally filtered by status.
+      parameters:
+        - in: query
+          name: status
+          schema:
+            $ref: "#/components/schemas/RunStatus"
+      responses:
+        "200":
+          description: Runs (most recent first, up to 100).
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Run"
+  /runs/{run_id}:
+    get:
+      operationId: getRun
+      summary: Fetch a run including its task tree.
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Run with tasks.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RunDetail"
+        "404":
+          description: Run not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /runs/{run_id}/trace:
+    get:
+      operationId: getTrace
+      summary: Fetch the span tree for a run. Returns 503 when ClickHouse is not configured.
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Trace with spans (blob attributes presigned to HTTPS URLs).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TraceResponse"
+        "404":
+          description: Run not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Trace service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /runs/{run_id}/cancel:
+    post:
+      operationId: cancelRun
+      summary: Cancel a run. Idempotent.
+      parameters:
+        - in: path
+          name: run_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Cancellation acknowledged.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CancelResponse"
+  /retrievals:
+    get:
+      operationId: listRetrievals
+      summary: List retrieval rows (most recent first, up to 500). Returns 503 when ClickHouse is not configured.
+      parameters:
+        - in: query
+          name: run_id
+          schema:
+            type: string
+          description: Filter by eval run ID. Returns all runs when omitted.
+      responses:
+        "200":
+          description: Retrieval rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RetrievalRow"
+        "503":
+          description: Retrieval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /llm-calls:
+    get:
+      operationId: listLlmCalls
+      summary: List LLM call rows (most recent first, up to 500). Returns 503 when ClickHouse is not configured.
+      parameters:
+        - in: query
+          name: run_id
+          schema:
+            type: string
+          description: Filter by eval run ID. Returns all runs when omitted.
+      responses:
+        "200":
+          description: LLM call rows.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/LlmCallRow"
+        "503":
+          description: LLM call service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evals:
+    get:
+      operationId: listEvals
+      summary: List eval summaries (most recent first). Returns 503 when ClickHouse is not configured.
+      responses:
+        "200":
+          description: Eval summaries.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EvalSummary"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evals/{eval_id}:
+    get:
+      operationId: getEval
+      summary: Fetch per-example events for an eval run.
+      parameters:
+        - in: path
+          name: eval_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Per-example eval events.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EvalEvent"
+        "404":
+          description: Eval not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /finetune-jobs:
+    post:
+      operationId: createFinetuneJob
+      summary: Start a mine → train → promote finetune job.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFinetuneJobRequest"
+      responses:
+        "201":
+          description: Job created and dispatched.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinetuneJob"
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listFinetuneJobs
+      summary: List finetune jobs (most recent first, up to 50).
+      responses:
+        "200":
+          description: Finetune jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/FinetuneJob"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /finetune-jobs/{job_id}:
+    get:
+      operationId: getFinetuneJob
+      summary: Fetch a single finetune job by ID.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Finetune job detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/FinetuneJob"
+        "404":
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Finetune service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /embedding-jobs:
+    get:
+      operationId: listEmbeddingJobs
+      summary: List embedding jobs (most recent first, up to 50).
+      responses:
+        "200":
+          description: Embedding jobs.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/EmbeddingJob"
+        "503":
+          description: Embedding service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /embedding-jobs/{job_id}:
+    get:
+      operationId: getEmbeddingJob
+      summary: Fetch a single embedding job by ID.
+      parameters:
+        - in: path
+          name: job_id
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Embedding job detail.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmbeddingJob"
+        "404":
+          description: Job not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Embedding service not configured.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /evals/{eval_id}/events:
+    post:
+      operationId: recordEvalEvents
+      summary: Record per-example eval scores from a Python harness run.
+      parameters:
+        - in: path
+          name: eval_id
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordEvalEventsRequest"
+      responses:
+        "204":
+          description: Events recorded.
+        "400":
+          description: Invalid request body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: Eval service not configured (CLICKHOUSE_URL not set).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+components:
+  schemas:
+    RunStatus:
+      type: string
+      enum: [pending, running, succeeded, failed, cancelled]
+    TaskStatus:
+      type: string
+      enum: [pending, ready, running, succeeded, failed, cancelled, dead]
+    Run:
+      type: object
+      required: [id, workflow_id, status, submitted_at, submitted_by, trace_id]
+      properties:
+        id:
+          type: string
+        workflow_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/RunStatus"
+        input:
+          type: string
+          description: Raw JSON bytes (base64 in transit).
+        output:
+          type: string
+        error:
+          type: string
+        submitted_at:
+          type: string
+          format: date-time
+        submitted_by:
+          type: string
+        trace_id:
+          type: string
+        task_ids:
+          type: array
+          items:
+            type: string
+    Task:
+      type: object
+      required: [id, run_id, node_id, status, attempts]
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        node_id:
+          type: string
+        status:
+          $ref: "#/components/schemas/TaskStatus"
+        attempts:
+          type: integer
+    RunDetail:
+      allOf:
+        - $ref: "#/components/schemas/Run"
+        - type: object
+          required: [tasks]
+          properties:
+            tasks:
+              type: array
+              items:
+                $ref: "#/components/schemas/Task"
+    CancelResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        run_id:
+          type: string
+    SpanRecord:
+      type: object
+      required: [span_id, name, kind, start_time, end_time, duration_ms]
+      properties:
+        span_id:
+          type: string
+        parent_span_id:
+          type: string
+        run_id:
+          type: string
+        task_id:
+          type: string
+        attempt_number:
+          type: integer
+        name:
+          type: string
+        kind:
+          type: string
+        start_time:
+          type: string
+          format: date-time
+        end_time:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        status:
+          type: string
+        status_message:
+          type: string
+        service_name:
+          type: string
+        attributes:
+          type: object
+          additionalProperties:
+            type: string
+    TraceResponse:
+      type: object
+      required: [trace_id, spans]
+      properties:
+        trace_id:
+          type: string
+        spans:
+          type: array
+          items:
+            $ref: "#/components/schemas/SpanRecord"
+    RetrievalRow:
+      type: object
+      required:
+        [trace_id, span_id, run_id, query, retriever, top_k, recall_at_k, start_time, duration_ms]
+      properties:
+        trace_id:
+          type: string
+        span_id:
+          type: string
+        run_id:
+          type: string
+        query:
+          type: string
+        retriever:
+          type: string
+        top_k:
+          type: integer
+        recall_at_k:
+          type: integer
+        start_time:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+    LlmCallRow:
+      type: object
+      required:
+        [
+          trace_id,
+          span_id,
+          run_id,
+          provider,
+          model,
+          prompt_tokens,
+          completion_tokens,
+          total_tokens,
+          cost_usd,
+          start_time,
+          duration_ms,
+        ]
+      properties:
+        trace_id:
+          type: string
+        span_id:
+          type: string
+        run_id:
+          type: string
+        provider:
+          type: string
+        model:
+          type: string
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        total_tokens:
+          type: integer
+        cost_usd:
+          type: number
+          format: double
+        start_time:
+          type: string
+          format: date-time
+        duration_ms:
+          type: integer
+        status:
+          type: string
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+    ScorerMean:
+      type: object
+      required: [scorer, mean, n]
+      properties:
+        scorer:
+          type: string
+        mean:
+          type: number
+          format: double
+        n:
+          type: integer
+    EvalSummary:
+      type: object
+      required: [eval_id, examples, started_at, finished_at, scorers]
+      properties:
+        eval_id:
+          type: string
+        examples:
+          type: integer
+        started_at:
+          type: string
+          format: date-time
+        finished_at:
+          type: string
+          format: date-time
+        scorers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ScorerMean"
+    EvalEvent:
+      type: object
+      required: [eval_id, example_id, scorer, score, passed, timestamp]
+      properties:
+        eval_id:
+          type: string
+        example_id:
+          type: string
+        run_id:
+          type: string
+        scorer:
+          type: string
+        score:
+          type: number
+          format: double
+        passed:
+          type: boolean
+        details:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+    RecordEvalEventsRequest:
+      type: object
+      required: [events]
+      properties:
+        events:
+          type: array
+          items:
+            type: object
+            required: [example_id, scorer, score, passed]
+            properties:
+              example_id:
+                type: string
+              run_id:
+                type: string
+              scorer:
+                type: string
+              score:
+                type: number
+                format: double
+              passed:
+                type: boolean
+              details:
+                type: object
+                additionalProperties: true
+    EmbeddingJob:
+      type: object
+      required: [id, base_model, status, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        finetune_job_id:
+          type: string
+          format: uuid
+          nullable: true
+        base_model:
+          type: string
+        status:
+          type: string
+        triplets_count:
+          type: integer
+          nullable: true
+        metrics:
+          type: object
+          nullable: true
+          additionalProperties: true
+        artifact_uri:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        promoted_at:
+          type: string
+          format: date-time
+          nullable: true
+    FinetuneJob:
+      type: object
+      required: [id, status, train_split, eval_split, corpus_alias, created_at, updated_at]
+      properties:
+        id:
+          type: string
+        run_id:
+          type: string
+        status:
+          type: string
+          description: pending|mining|training|promoting|done|failed|promoted|archived|no_failures|no_triplets
+        train_split:
+          type: string
+        eval_split:
+          type: string
+        corpus_alias:
+          type: string
+        failures:
+          type: integer
+        triplets:
+          type: integer
+        before_recall:
+          type: number
+          format: double
+        after_recall:
+          type: number
+          format: double
+        outcome:
+          type: string
+          description: promoted|archived|no_failures|no_triplets|null
+        error:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    CreateFinetuneJobRequest:
+      type: object
+      required: [train_split, eval_split]
+      properties:
+        train_split:
+          type: string
+          description: Path or alias of the training dataset.
+        eval_split:
+          type: string
+          description: Path or alias of the evaluation dataset.
+        corpus_alias:
+          type: string
+          description: Qdrant collection alias to mine and promote (default corpus.active).

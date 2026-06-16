@@ -6,23 +6,54 @@ For tool-specific notes (e.g. how the maintainer invokes a particular agent), se
 
 ---
 
-## Current phase: vertical slice (M0)
+## Current phase: M10 — Embedding-jobs view (M1–M10 landed)
 
-**The authoritative scope right now is `docs/vertical-slice-plan.md`.**
+**The authoritative scope is the milestone plans `docs/m1-plan.md … docs/m10-plan.md` (all implemented) and `docs/vertical-slice-plan.md` (BRIGHT experiment complete).**
 
-We are building the Python single-process implementation of the research loop:
+The full production stack and dashboard are on disk. The research thesis is demonstrated:
+on BRIGHT biology the mine→train→promote loop lifts recall@10 from **0.253 → 0.343** (+0.090,
+95% CI [0.010, 0.175], sign-test p=0.041) — see `evals/baselines/bright_b5_canary_flips.json`.
 
-- SQLite for state (no Postgres yet)
-- `asyncio.Queue` for dispatch (no NATS yet)
-- JSONL file for spans (no ClickHouse yet)
-- Qdrant for vectors (real, in Docker)
-- LiteLLM for model calls (real, with disk-backed response cache)
+Milestone arc (all landed; see `CHANGELOG.md` for per-milestone detail):
+- **M1** Go orchestrator (gRPC + REST + migration runner) · **M2** ClickHouse + OTel collector ·
+  **M3** Redis + MinIO · **M4** dashboard Runs slice · **M5** trace endpoint + trace view + CI wiring ·
+  **M6** eval views · **M7** retrievals fan-out + ClickHouse miner path · **M8** LLM-calls fan-out +
+  cost dashboard · **M9a** integration test suite · **M9b** production failure miner
+  (`POST /api/v1/finetune-jobs`) · **M10** embedding-jobs write/read path + `/embeddings` view.
 
-The full production architecture described later in this document — Go orchestrator, NATS JetStream, ClickHouse, Postgres, gRPC, Next.js dashboard — is the **target state**, not what exists today. Treat any reference to those components in the rest of this file as future context.
+The full stack on disk:
 
-When this section says "Go" or "Postgres" or "NATS" or "proto" or "Helm", you are reading about a system that does not yet exist on disk. The slice operates only in `worker/`, `evals/`, and `scripts/`. The Makefile targets that exist today are: `dev`, `dev-down`, `seed`, `eval`, `eval-full`, `eval-final`, `test-eval-smoke`, `test`, `lint`, `fmt`. Anything else in the commands table below is future state.
+- **`web/`** — Next.js 14 (App Router), TanStack Query, shadcn/ui, Tailwind. Pages: `/runs`,
+  `/runs/[id]`, `/runs/[id]/trace`, `/evals`, `/evals/[id]`, `/retrievals`, `/llm-calls`,
+  `/finetune-jobs`, `/embeddings`. BFF route handlers in `web/app/api/`; types from `web/openapi.yaml`.
+- **Postgres 15** for run/task/worker state + `finetune_jobs` + `embedding_jobs`
+  (`migrations/202606150001_initial_schema.sql`, `202606160001_finetune_jobs.sql`,
+  `202606160002_embedding_jobs_finetune_link.sql`)
+- **NATS JetStream** for task dispatch (`helix.tasks.dispatch.<pool>`)
+- **ClickHouse 24** for spans + `retrievals` + `llm_calls` + `eval_events` (all live)
+- **Redis 7** for the exactly-once sentinel and the LLM rate limiter (`worker/helix/runtime/idempotency.py`, `worker/helix/tools/rate_limit.py`)
+- **MinIO** for large span-payload blobs (`worker/helix/tools/blob.py`) — `s3://helix-blobs/<y>/<m>/<d>/<span_id>.bin`
+- **Go orchestrator** (`cmd/orchestrator/`) — gRPC + REST server, migration runner
+- **Go collector** (`cmd/collector/`) — OTLP/gRPC receiver → ClickHouse BatchWriter
+- **Python worker** (`worker/helix/worker/__main__.py`) — gRPC client + NATS consumer; handles
+  `deep_research` and `finetune_job` workflows
+- **Proto contracts** (`proto/helix/v1/`) — stubs in `gen/go/helix/v1/` (Go) and `worker/helix/v1/` (Python)
+- **Qdrant** for vectors
+- **JSONL spans** (`data/spans.jsonl`) — still written; OTel is additive (dual-write)
+- **OTel integration** (`worker/helix/otel.py`) — no-op when `OTEL_EXPORTER_OTLP_ENDPOINT` unset
 
-Update this section when the phase changes. When the Go orchestrator lands (M1), remove the SQLite/asyncio bullets and update the commands table; when the dashboard lands (M4), remove the Next.js notice; and so on. The doc tracks the system.
+Redis and MinIO are **no-ops when `REDIS_URL` / `S3_ENDPOINT` are unset**: `make eval` runs in local mode (Python in-process) with neither. `make dev` boots Qdrant + Postgres + NATS + ClickHouse + Redis + MinIO. MinIO's API is on host **9100** (console 9101) to avoid ClickHouse's host 9000. Span-payload offload is gated by `HELIX_SPAN_PAYLOADS` (default off).
+
+What is NOT yet on disk (remaining work):
+- **Helm/Kubernetes deployment.** `infra/` has only `docker-compose.yml`; no charts/manifests for
+  orchestrator, collector, worker pools, or the datastores. This is the largest remaining milestone.
+- **Small deferred items from M10:** intermediate embedding-job phase statuses
+  (`mining`/`training`/`evaluating`, needs worker checkpoints); presigned MinIO URLs for
+  `embedding_jobs.artifact_uri`; capturing the real `TrainConfig` into `embedding_jobs.config`.
+- **Production-scale eval:** `make eval-full` (BRIGHT + 50k arXiv, ~1hr, live cluster) — the
+  slice-scale BRIGHT experiment is run; the full-corpus run is not.
+
+Update this section as new milestones land.
 
 ## What this repo is
 
@@ -41,7 +72,7 @@ cmd/
 
 worker/              Python: worker runtime, tool adapters, SDK decorators  [M0+]
   helix/             public SDK surface (`helix.workflow`, `helix.task`)
-  helix_proto/       generated gRPC stubs (do not edit by hand)             [M1+]
+  helix/v1/          generated gRPC stubs (do not edit by hand)             [M1+]
   tools/             LiteLLM adapter, Qdrant adapter, web search, sandbox
 
 rag/                 Python: indexer, retriever, reranker, miner, trainer   [M0+ partial]
@@ -93,6 +124,10 @@ Before ending any session that produced commits or left work in progress, you mu
 If the session produced no changes (e.g., you only investigated something), append a one-line entry noting that and what was learned.
 
 Do not skip this step. The next agent — possibly a different tool — depends on it.
+
+### Log issues as you hit them
+
+Whenever you run into a non-trivial problem — an environment quirk, a third-party bug, a silent failure or no-op, a design trap, a missing dependency surfaced only at runtime — append an entry to `ISSUES.md` describing the symptom, root cause, fix, and any guard (test/lint/CI) that keeps it fixed. Use the template at the top of that file. Do this **when you solve the issue**, not only at session end, so the record is accurate while it's fresh. The goal is that no agent re-debugs a problem we already understand. If a fix you ship resolves an issue already logged, update that entry rather than adding a duplicate.
 
 ## Commands
 

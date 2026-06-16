@@ -85,6 +85,13 @@ JSON over HTTPS. Authenticated via bearer token in `Authorization: Bearer <token
 
 `idempotency_key` is honored for 24h; resubmitting the same key returns the original run_id.
 
+> **Implemented (M1–M5):** `POST`/`GET`/list/cancel/trace on `/api/v1/runs`. As of M4,
+> `GET /api/v1/runs/{run_id}` returns run fields plus a `tasks` array. As of M5,
+> `GET /api/v1/runs/{run_id}/trace` returns `{trace_id, spans:[...]}` from ClickHouse;
+> `s3://` blob attributes are rewritten to presigned HTTPS GET URLs (1h expiry); returns
+> 503 when `CLICKHOUSE_URL` is not set. `web/openapi.yaml` (now includes `SpanRecord` +
+> `TraceResponse`) is the source for dashboard-generated types. SSE and `replay` not yet.
+
 Replay modes:
 - `deterministic` short-circuits every recorded LLM call, retrieval, and tool call by `(input_hash, model_id, tool_name)`. Used for debugging and regression. Bytewise-identical output is the contract.
 - `live` re-executes against current models and indices. Used for comparison runs after a model promotion or prompt change.

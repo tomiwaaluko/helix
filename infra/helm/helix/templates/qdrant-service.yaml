@@ -1,0 +1,46 @@
+# Headless service for stable DNS (StatefulSet pods)
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-qdrant-headless
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  type: ClusterIP
+  clusterIP: None
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+  ports:
+    - name: http
+      port: {{ .Values.qdrant.port }}
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.qdrant.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
+---
+# ClusterIP service for application access
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "helix.fullname" . }}-qdrant
+  labels:
+    {{- include "helix.labels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "helix.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: qdrant
+  ports:
+    - name: http
+      port: {{ .Values.qdrant.port }}
+      targetPort: http
+      protocol: TCP
+    - name: grpc
+      port: {{ .Values.qdrant.grpcPort }}
+      targetPort: grpc
+      protocol: TCP
